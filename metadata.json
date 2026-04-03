@@ -1,0 +1,9 @@
+{
+  "name": "FunScholar LMS",
+  "description": "A comprehensive Learning Management System for robotics education, featuring role-based access for admins, teachers, and students, project tracking, and Google Drive integration.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

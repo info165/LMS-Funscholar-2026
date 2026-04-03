@@ -1,0 +1,186 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with role-based access and gamification data.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "teacher", "student"] },
+        "schoolIds": { "type": "array", "items": { "type": "string" } },
+        "mode": { "type": "string", "enum": ["in-school", "online"] },
+        "xp": { "type": "number", "default": 0 },
+        "level": { "type": "number", "default": 1 },
+        "badges": { "type": "array", "items": { "type": "string" } },
+        "lastLogin": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "School": {
+      "title": "School",
+      "description": "Educational institution mapped to the LMS.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "state": { "type": "string" }
+      },
+      "required": ["id", "name", "state"]
+    },
+    "Component": {
+      "title": "Component",
+      "description": "Reusable hardware or software component for projects.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "Robotics curriculum for specific grades.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "grade": { "type": "number", "description": "Class 1 to 12" },
+        "description": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "activated": { "type": "boolean" }
+      },
+      "required": ["id", "title", "grade"]
+    },
+    "Module": {
+      "title": "Module",
+      "description": "A specific learning module within a course.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "driveUrl": { "type": "string", "format": "uri" },
+        "thumbnailUrl": { "type": "string" },
+        "isVisible": { "type": "boolean", "default": true },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "url": { "type": "string" },
+              "type": { "type": "string", "enum": ["video", "pdf", "ppt", "image", "link"] }
+            }
+          }
+        },
+        "componentIds": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "courseId", "title"]
+    },
+    "ContentActivation": {
+      "title": "ContentActivation",
+      "description": "Tracks which modules are activated for a school/teacher.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "activated": { "type": "boolean" }
+      },
+      "required": ["moduleId", "schoolId", "teacherId", "activated"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Robotics project assigned to students.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseId": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "driveUrl": { "type": "string", "format": "uri" },
+        "thumbnailUrl": { "type": "string" },
+        "isVisible": { "type": "boolean", "default": true },
+        "projectImages": { "type": "array", "items": { "type": "string" } },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "url": { "type": "string" },
+              "type": { "type": "string", "enum": ["video", "pdf", "ppt", "image", "link"] }
+            }
+          }
+        },
+        "componentIds": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "courseId", "moduleId", "title"]
+    },
+    "Submission": {
+      "title": "Submission",
+      "description": "Student project submission with review data.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "photoUrl": { "type": "string", "format": "uri" },
+        "videoUrl": { "type": "string", "format": "uri" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "reviewed"] },
+        "rating": { "type": "number" },
+        "feedback": { "type": "string" }
+      },
+      "required": ["id", "projectId", "studentId", "timestamp", "status"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Student attendance record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["present", "absent"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "schoolId", "teacherId", "date", "status", "timestamp"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "Activity logs for teachers.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "duration": { "type": "number", "description": "Duration in minutes" },
+        "activity": { "type": "string" }
+      },
+      "required": ["id", "teacherId", "timestamp", "activity"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "User", "description": "User profiles." },
+    "/schools/{schoolId}": { "schema": "School", "description": "School details." },
+    "/courses/{courseId}": { "schema": "Course", "description": "Course information." },
+    "/modules/{moduleId}": { "schema": "Module", "description": "Learning modules." },
+    "/activations/{activationId}": { "schema": "ContentActivation", "description": "Module activations." },
+    "/projects/{projectId}": { "schema": "Project", "description": "Project assignments." },
+    "/submissions/{submissionId}": { "schema": "Submission", "description": "Student submissions." },
+    "/attendance/{attendanceId}": { "schema": "Attendance", "description": "Attendance records." },
+    "/logs/{logId}": { "schema": "Log", "description": "Teacher activity logs." }
+  }
+}
