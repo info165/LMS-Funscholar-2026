@@ -157,7 +157,6 @@ export default function Courses() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-xl font-bold">{course.title}</h3>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-white/20">GRADE {course.grade}</span>
                   </div>
                   <p className="text-white/40 text-sm mt-1">{course.description}</p>
                   <p className="text-[10px] uppercase font-bold tracking-widest text-[#F27D26] mt-4">

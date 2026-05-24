@@ -6,6 +6,9 @@ export interface UserProfile {
   name: string;
   email: string;
   role: UserRole;
+  roles?: UserRole[];
+  phone?: string;
+  password?: string;
   schoolIds?: string[];
   mode?: UserMode;
   xp: number;
@@ -25,7 +28,7 @@ export interface ContentFile {
   id: string;
   name: string;
   url: string;
-  type: 'video' | 'pdf' | 'ppt' | 'image' | 'link' | 'doc';
+  type: 'video' | 'pdf' | 'ppt' | 'image' | 'link' | 'doc' | 'code';
 }
 
 export interface Component {
@@ -42,6 +45,17 @@ export interface Course {
   teacherId: string;
   schoolId: string;
   activated: boolean;
+  ageRange?: string;
+  courseType?: string;
+  subCategory?: string;
+  difficulty?: string;
+}
+
+export interface ModuleStep {
+  id: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
 }
 
 export interface Module {
@@ -52,6 +66,7 @@ export interface Module {
   thumbnailUrl?: string;
   files: ContentFile[];
   componentIds?: string[];
+  steps?: ModuleStep[];
   driveUrl?: string;
   videoUrl?: string;
   pptUrl?: string;
@@ -86,6 +101,7 @@ export interface Submission {
   id: string;
   projectId: string;
   studentId: string;
+  partnerIds?: string[];
   photoUrl?: string;
   videoUrl?: string;
   timestamp: string;
@@ -107,7 +123,44 @@ export interface Attendance {
 export interface TeacherLog {
   id: string;
   teacherId: string;
-  timestamp: string;
-  duration?: number;
+  teacherName?: string;
+  schoolId: string;
+  courseId: string;
+  moduleId: string;
+  date: string;
+  period?: string;
+  classSection?: string;
+  timestamp: any;
   activity: string;
+  duration?: number;
+}
+
+export type TransportMode = 'Auto' | 'Bus' | 'Train/Metro' | 'Bike' | 'Personal Vehicle' | 'Others';
+
+export interface ExpenseLeg {
+  mode: TransportMode;
+  amount: number;
+}
+
+export interface ExpenseTemplate {
+  id: string;
+  teacherId: string;
+  schoolId: string;
+  totalAmount: number;
+  legs: ExpenseLeg[];
+  description?: string;
+}
+
+export interface ExpenseLog {
+  id: string;
+  teacherId: string;
+  teacherName?: string;
+  schoolId: string;
+  schoolName?: string;
+  totalAmount: number;
+  legs: ExpenseLeg[];
+  date: string;
+  description: string;
+  timestamp: any;
+  status: 'pending' | 'approved' | 'rejected';
 }

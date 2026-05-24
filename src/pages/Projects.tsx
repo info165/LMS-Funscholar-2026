@@ -13,7 +13,7 @@ import FileViewer from '../components/FileViewer';
 import { useSearchParams } from 'react-router-dom';
 
 export default function Projects() {
-  const { profile } = useAuth();
+  const { profile, partners } = useAuth();
   const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -195,6 +195,7 @@ export default function Projects() {
           await addDoc(collection(db, 'submissions'), {
             projectId,
             studentId: profile.uid,
+            partnerIds: partners.map(p => p.uid),
             [isVideo ? 'videoUrl' : 'photoUrl']: url,
             timestamp: new Date().toISOString(),
             status: 'pending'

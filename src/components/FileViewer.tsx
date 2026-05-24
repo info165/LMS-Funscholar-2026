@@ -1,10 +1,11 @@
 import React from 'react';
 import { X, ExternalLink } from 'lucide-react';
 import { useAuth } from '../AuthContext';
+import { toast } from 'sonner';
 
 interface FileViewerProps {
   url: string;
-  type: 'video' | 'pdf' | 'ppt' | 'image' | 'doc';
+  type: 'video' | 'pdf' | 'ppt' | 'image' | 'doc' | 'code' | 'link';
   title: string;
   onClose: () => void;
 }
@@ -74,6 +75,52 @@ export default function FileViewer({ url, type, title, onClose }: FileViewerProp
             className="max-w-full max-h-full object-contain"
             referrerPolicy="no-referrer"
           />
+        </div>
+      );
+    }
+
+    if (type === 'code') {
+      return (
+        <div className="w-full h-full flex flex-col bg-zinc-950 rounded-xl overflow-hidden border border-white/10 p-4">
+          <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-white/5 rounded-t-lg -mx-4 -mt-4 mb-4">
+            <span className="text-[10px] font-mono text-white/50 uppercase tracking-widest font-black">Source Code</span>
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(url);
+                toast.success('Code copied to clipboard!');
+              }}
+              className="text-[10px] px-2.5 py-1 bg-white/5 hover:bg-white/10 rounded font-bold text-white/70 transition-colors uppercase tracking-wider"
+            >
+              Copy Code
+            </button>
+          </div>
+          <pre className="font-mono text-xs text-[#F27D26] overflow-auto h-full p-4 bg-black/50 rounded-lg whitespace-pre select-all">
+            <code>{url}</code>
+          </pre>
+        </div>
+      );
+    }
+
+    if (type === 'link') {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-zinc-950 rounded-xl border border-white/10 space-y-6">
+          <div className="w-16 h-16 bg-[#F27D26]/10 rounded-full flex items-center justify-center text-[#F27D26]">
+            <ExternalLink size={32} />
+          </div>
+          <div className="text-center space-y-2 max-w-md">
+            <h4 className="font-bold text-lg text-white">External Learning Resource</h4>
+            <p className="text-sm text-white/40">This module includes a resource link for external explanation or student reference.</p>
+            <p className="text-xs font-mono text-zinc-500 bg-white/5 p-2 rounded truncate block mt-2 border border-white/5">{url}</p>
+          </div>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-6 py-3 bg-[#F27D26] hover:bg-[#d66a1e] text-white rounded-xl font-bold transition-all shadow-lg flex items-center gap-2"
+          >
+            <span>Open Link in New Tab</span>
+            <ExternalLink size={16} />
+          </a>
         </div>
       );
     }

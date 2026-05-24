@@ -2,24 +2,33 @@ import React, { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, where, doc, orderBy, limit } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
-import { Course, Module, Project, Submission, School, UserProfile } from '../types';
-import { Trophy, Star, Zap, BookOpen, ClipboardList, ChevronRight, Play, CheckCircle, Share2, X, Camera } from 'lucide-react';
+import { Course, Module, Project, Submission, School, UserProfile, Component } from '../types';
+import { Trophy, Star, Zap, BookOpen, ClipboardList, ChevronRight, Play, CheckCircle, Share2, X, Camera, Users, Search, UserPlus, UserMinus, LayoutGrid } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleDriveViewer } from '../components/GoogleDriveViewer';
+import { ModulePlayer } from '../components/ModulePlayer';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 
 export default function StudentDashboard() {
-  const { profile } = useAuth();
+  const { profile, partners, setPartners } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [school, setSchool] = useState<School | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [activeModule, setActiveModule] = useState<Module | null>(null);
+  const [components, setComponents] = useState<Component[]>([]);
   const [leaderboard, setLeaderboard] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Group Session states
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [allStudents, setAllStudents] = useState<UserProfile[]>([]);
 
   useEffect(() => {
     if (!profile) return;
@@ -84,6 +93,25 @@ export default function StudentDashboard() {
       handleFirestoreError(error, OperationType.LIST, 'submissions');
     });
 
+    // Fetch all components for the player
+    const unsubComponents = onSnapshot(collection(db, 'components'), (snapshot) => {
+      setComponents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Component)));
+    });
+
+    // Fetch all students in school for group selection
+    if (profile.schoolIds?.[0]) {
+      onSnapshot(query(
+        collection(db, 'users'),
+        where('schoolIds', 'array-contains', profile.schoolIds[0]),
+        where('role', '==', 'student')
+      ), (snapshot) => {
+        setAllStudents(snapshot.docs
+          .map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile))
+          .filter(u => u.uid !== profile.uid)
+        );
+      });
+    }
+
     setLoading(false);
 
     return () => {
@@ -91,6 +119,7 @@ export default function StudentDashboard() {
       unsubModules();
       unsubProjects();
       unsubSubmissions();
+      unsubComponents();
     };
   }, [profile]);
 
@@ -126,8 +155,29 @@ export default function StudentDashboard() {
           </div>
 
           <div className="flex-1 space-y-4 text-center md:text-left">
-            <h2 className="text-5xl font-bold tracking-tighter">Keep building, {profile?.name.split(' ')[0]}!</h2>
-            <div className="space-y-2">
+            <div className="flex items-center justify-center md:justify-start gap-3 flex-wrap">
+              <h2 className="text-5xl font-bold tracking-tighter">Keep building, {profile?.name.split(' ')[0]}!</h2>
+              <button 
+                onClick={() => setIsGroupModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#F27D26]/10 hover:border-[#F27D26]/30 transition-all text-white/60 hover:text-[#F27D26]"
+              >
+                <Users size={14} /> 
+                {partners.length > 0 ? `${partners.length + 1} Members Group` : 'Group Work'}
+              </button>
+            </div>
+            {partners.length > 0 && (
+              <div className="flex flex-wrap justify-center md:justify-start gap-2">
+                {[profile!, ...partners].map(p => (
+                  <div key={p.uid} className="flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-bold">
+                    <div className="w-5 h-5 rounded-full bg-[#F27D26] flex items-center justify-center text-[10px] text-white">
+                      {p.name.charAt(0)}
+                    </div>
+                    {p.name.split(' ')[0]}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="space-y-2 max-w-md mx-auto md:mx-0">
               <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-white/40">
                 <span>XP PROGRESS</span>
                 <span>{profile?.xp || 0} / {xpToNextLevel} XP</span>
@@ -179,10 +229,30 @@ export default function StudentDashboard() {
                       <div className="p-3 rounded-2xl bg-[#F27D26]/10 text-[#F27D26]">
                         <BookOpen size={24} />
                       </div>
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">GRADE {course.grade}</span>
+                      {/* Grade indicator removed per user request */}
                     </div>
                     <h4 className="text-xl font-bold mb-4 group-hover:text-[#F27D26] transition-colors">{course.title}</h4>
-                    <div className="space-y-3">
+                    <div className="flex flex-col gap-4">
+                      {courseModules.map(module => (
+                        <div key={module.id} className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl group/module hover:border-white/10 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-black/40 flex items-center justify-center text-white/20 group-hover/module:text-[#F27D26] transition-colors">
+                              <LayoutGrid size={16} />
+                            </div>
+                            <span className="text-sm font-bold truncate max-w-[120px]">{module.title}</span>
+                          </div>
+                          {(module.steps || []).length > 0 && (
+                            <button 
+                              onClick={() => setActiveModule(module)}
+                              className="px-3 py-1.5 bg-[#F27D26]/10 text-[#F27D26] text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-[#F27D26] hover:text-white transition-all flex items-center gap-1.5"
+                            >
+                              <Play size={10} fill="currentColor" /> Start LMS
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="space-y-3 mt-6">
                       <div className="flex justify-between text-[10px] font-bold text-white/40 uppercase tracking-widest">
                         <span>Progress</span>
                         <span>{Math.round(progress)}%</span>
@@ -306,6 +376,124 @@ export default function StudentDashboard() {
           </section>
         </div>
       </div>
+
+      {/* Module Player Modal */}
+      <AnimatePresence>
+        {activeModule && (
+          <ModulePlayer 
+            module={activeModule} 
+            components={components}
+            onClose={() => setActiveModule(null)} 
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Group Login Modal */}
+      <AnimatePresence>
+        {isGroupModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#151619] border border-white/10 rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl"
+            >
+              <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/5">
+                <div>
+                  <h3 className="text-2xl font-bold">Group Workspace</h3>
+                  <p className="text-white/40 text-[10px] uppercase tracking-widest font-bold mt-1">Add session members</p>
+                </div>
+                <button onClick={() => setIsGroupModalOpen(false)} className="text-white/40 hover:text-white transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                  <input 
+                    type="text"
+                    placeholder="Search students by name..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      const results = allStudents.filter(u => u.name.toLowerCase().includes(e.target.value.toLowerCase()));
+                      setSearchResults(e.target.value ? results : []);
+                    }}
+                    className="w-full pl-12 pr-4 py-3 bg-black border border-white/10 rounded-xl focus:outline-none focus:border-[#F27D26] text-sm"
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-white/30">Current Group</label>
+                    <span className="text-[10px] text-[#F27D26] font-bold">{partners.length + 1} / 4 Members</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between p-3 bg-[#F27D26]/10 border border-[#F27D26]/20 rounded-xl">
+                      <div className="flex items-center gap-3">
+                         <div className="w-8 h-8 rounded-full bg-[#F27D26] flex items-center justify-center font-bold text-xs text-white">
+                           {profile?.name.charAt(0)}
+                         </div>
+                         <span className="text-sm font-bold">{profile?.name} (You)</span>
+                      </div>
+                    </div>
+                    {partners.map(p => (
+                      <div key={p.uid} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl">
+                        <div className="flex items-center gap-3">
+                           <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center font-bold text-xs text-white/40">
+                             {p.name.charAt(0)}
+                           </div>
+                           <span className="text-sm font-bold">{p.name}</span>
+                        </div>
+                        <button 
+                          onClick={() => setPartners(prev => prev.filter(ptr => ptr.uid !== p.uid))}
+                          className="text-white/20 hover:text-red-500 transition-colors"
+                        >
+                          <UserMinus size={18} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {searchQuery && (
+                  <div className="pt-4 border-t border-white/5 space-y-2 max-h-48 overflow-y-auto">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-white/30">Results</label>
+                    {searchResults.length > 0 ? searchResults.map(res => (
+                      <button 
+                        key={res.uid}
+                        onClick={() => {
+                          if (!partners.find(p => p.uid === res.uid) && partners.length < 3) {
+                            setPartners(prev => [...prev, res]);
+                            setSearchQuery('');
+                            setSearchResults([]);
+                          } else if (partners.length >= 3) {
+                            toast.error('Max 4 members per group');
+                          }
+                        }}
+                        className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors group"
+                      >
+                         <span className="text-sm font-medium">{res.name}</span>
+                         <UserPlus size={18} className="text-white/20 group-hover:text-[#F27D26]" />
+                      </button>
+                    )) : (
+                      <p className="text-center py-4 text-xs text-white/20">No students found</p>
+                    )}
+                  </div>
+                )}
+                
+                <button 
+                  onClick={() => setIsGroupModalOpen(false)}
+                  className="w-full py-4 bg-[#F27D26] text-white rounded-xl font-bold text-sm tracking-widest uppercase hover:bg-[#d66a1e] transition-all"
+                >
+                  Start Group Session
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Project Modal */}
       <AnimatePresence>

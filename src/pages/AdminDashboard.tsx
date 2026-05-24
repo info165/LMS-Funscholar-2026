@@ -6,8 +6,11 @@ import { Users, School as SchoolIcon, BookOpen, ClipboardList, TrendingUp, MapPi
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, LineChart, Line } from 'recharts';
 import { cn } from '../lib/utils';
+import { useAuth } from '../AuthContext';
 
 export default function AdminDashboard() {
+  const { profile } = useAuth();
+  const subRole = profile?.adminSubRole || 'Super Admin';
   const [stats, setStats] = useState({
     schools: 0,
     teachers: 0,
@@ -100,8 +103,17 @@ export default function AdminDashboard() {
     <div className="space-y-8 pb-12">
       <header className="flex justify-between items-end">
         <div>
-          <h2 className="text-4xl font-bold tracking-tight">Executive Dashboard</h2>
-          <p className="text-white/50 font-mono text-xs uppercase tracking-widest mt-2">Real-time school progress monitoring</p>
+          <div className="flex items-center gap-3">
+            <h2 className="text-4xl font-bold tracking-tight">Executive Dashboard</h2>
+            <span className="px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+              {subRole}
+            </span>
+          </div>
+          <p className="text-white/50 font-mono text-xs uppercase tracking-widest mt-2">
+            {subRole === 'Super Admin' && "Real-time global school status, teachers, and curriculum metrics"}
+            {subRole === 'User Manager Admin' && "User management: rosters, schools, and teacher status metrics"}
+            {subRole === 'Curriculum Admin' && "Curriculum management: course materials and lesson matrices"}
+          </p>
         </div>
         <div className="flex gap-4">
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2">

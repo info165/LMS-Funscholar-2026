@@ -15,12 +15,19 @@ import { UserProfile, UserRole } from './types';
 
 interface AuthContextType {
   user: User | null;
-  profile: UserProfile | null;
+  profile: (UserProfile & { adminSubRole?: string }) | null;
   loading: boolean;
   login: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
+  partners: UserProfile[];
+  setPartners: React.Dispatch<React.SetStateAction<UserProfile[]>>;
+  realRole: UserRole | null;
+  activeRole: UserRole | null;
+  changeActiveRole: (role: UserRole | null) => void;
+  activeAdminSubRole: string;
+  changeActiveAdminSubRole: (subRole: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,7 +35,30 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [partners, setPartners] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [activeRole, setActiveRole] = useState<UserRole | null>(() => {
+    return (localStorage.getItem('funscholar_active_role') as UserRole) || null;
+  });
+
+  const [activeAdminSubRole, setActiveAdminSubRole] = useState<string>(() => {
+    return localStorage.getItem('funscholar_active_admin_sub_role') || 'Super Admin';
+  });
+
+  const changeActiveRole = (role: UserRole | null) => {
+    setActiveRole(role);
+    if (role) {
+      localStorage.setItem('funscholar_active_role', role);
+    } else {
+      localStorage.removeItem('funscholar_active_role');
+    }
+  };
+
+  const changeActiveAdminSubRole = (subRole: string) => {
+    setActiveAdminSubRole(subRole);
+    localStorage.setItem('funscholar_active_admin_sub_role', subRole);
+  };
 
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
@@ -146,8 +176,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signOut(auth);
   };
 
+  const realRole = profile?.role || null;
+  const isCreatorOfSystem = profile?.role === 'admin' || profile?.email?.toLowerCase() === 'info@funscholar.com';
+  const hasMultipleRoles = isCreatorOfSystem || (profile?.roles && profile.roles.length > 1);
+
+  const computedProfile = profile ? {
+    ...profile,
+    role: (hasMultipleRoles && activeRole) ? activeRole : profile.role,
+    adminSubRole: (isCreatorOfSystem ? activeAdminSubRole : 'Super Admin')
+  } : null;
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login, loginWithEmail, signUpWithEmail, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      profile: computedProfile, 
+      loading, 
+      login, 
+      loginWithEmail, 
+      signUpWithEmail, 
+      logout,
+      partners,
+      setPartners,
+      realRole,
+      activeRole,
+      changeActiveRole,
+      activeAdminSubRole,
+      changeActiveAdminSubRole
+    }}>
       {children}
     </AuthContext.Provider>
   );

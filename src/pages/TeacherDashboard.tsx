@@ -82,7 +82,6 @@ export default function TeacherDashboard() {
                     <div className="p-2 rounded-lg bg-[#F27D26]/10 text-[#F27D26]">
                       <BookOpen size={20} />
                     </div>
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-white/40">Grade {course.grade}</span>
                   </div>
                   <h4 className="font-bold mb-2">{course.title}</h4>
                   <div className="flex items-center justify-between mt-4">

@@ -90,6 +90,28 @@ service cloud.firestore {
     //   - activity: string (required)
     //   - duration: number (optional)
     //
+    // Collection: expenseTemplates
+    // Document ID: templateId
+    // Fields:
+    //   - teacherId: string (required)
+    //   - schoolId: string (required)
+    //   - amount: number (required)
+    //   - description: string (optional)
+    //   - modeOfTransport: string (optional)
+    //
+    // Collection: expenseLogs
+    // Document ID: expenseLogId
+    // Fields:
+    //   - teacherId: string (required)
+    //   - teacherName: string (optional)
+    //   - schoolId: string (required)
+    //   - schoolName: string (optional)
+    //   - amount: number (required)
+    //   - date: string (required)
+    //   - description: string (required)
+    //   - status: string (required, enum: pending, approved, rejected)
+    //   - timestamp: timestamp (required)
+    //
     // ===============================================================
 
     // Collection: components
@@ -228,10 +250,39 @@ service cloud.firestore {
     }
 
     function isValidLog(data) {
-      return data.keys().hasAll(['teacherId', 'timestamp', 'activity']) &&
+      return data.keys().hasAll(['teacherId', 'timestamp', 'activity', 'schoolId', 'courseId', 'moduleId']) &&
              data.teacherId is string &&
-             data.activity is string && data.activity.size() > 0 && data.activity.size() < 1000 &&
-             (!('duration' in data) || data.duration is number);
+             data.activity is string && data.activity.size() > 0 && data.activity.size() < 2000 &&
+             data.schoolId is string &&
+             data.courseId is string &&
+             data.moduleId is string &&
+             (!('period' in data) || data.period is string) &&
+             (!('classSection' in data) || data.classSection is string) &&
+             (!('teacherName' in data) || data.teacherName is string);
+    }
+
+    function isValidExpenseTemplate(data) {
+      return data.keys().hasAll(['teacherId', 'schoolId', 'totalAmount', 'legs']) &&
+             data.teacherId is string &&
+             data.schoolId is string &&
+             data.totalAmount is number &&
+             data.legs is list &&
+             (!('description' in data) || data.description is string);
+    }
+
+    function isValidExpenseLog(data) {
+      return data.keys().hasAll(['teacherId', 'schoolId', 'amount', 'totalAmount', 'date', 'description', 'status', 'timestamp', 'legs']) &&
+             data.teacherId is string &&
+             data.schoolId is string &&
+             data.amount is number &&
+             data.totalAmount is number &&
+             data.date is string &&
+             data.description is string &&
+             data.status in ['pending', 'approved', 'rejected'] &&
+             data.timestamp is timestamp &&
+             data.legs is list &&
+             (!('teacherName' in data) || data.teacherName is string) &&
+             (!('schoolName' in data) || data.schoolName is string);
     }
 
     // ===============================================================
@@ -301,6 +352,19 @@ service cloud.firestore {
       allow create: if isTeacher() && isValidLog(request.resource.data) && request.resource.data.teacherId == request.auth.uid;
       allow update: if isTeacher() && isOwner(resource.data.teacherId) && isValidLog(request.resource.data);
       allow delete: if isAdmin();
+    }
+
+    match /expenseTemplates/{templateId} {
+      allow read: if isTeacher() || isAdmin();
+      allow create, update: if (isTeacher() || isAdmin()) && isValidExpenseTemplate(request.resource.data) && request.resource.data.teacherId == request.auth.uid;
+      allow delete: if (isOwner(resource.data.teacherId)) || isAdmin();
+    }
+
+    match /expenseLogs/{expenseLogId} {
+      allow read: if isAuthenticated();
+      allow create: if (isTeacher() || isAdmin()) && isValidExpenseLog(request.resource.data) && request.resource.data.teacherId == request.auth.uid;
+      allow update: if (isAdmin() && isValidExpenseLog(request.resource.data)) || (isOwner(resource.data.teacherId) && resource.data.status == 'pending' && isValidExpenseLog(request.resource.data));
+      allow delete: if isAdmin() || (isOwner(resource.data.teacherId) && resource.data.status == 'pending');
     }
   }
 }
