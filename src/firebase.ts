@@ -1,18 +1,23 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getAuth, setPersistence, inMemoryPersistence } from 'firebase/auth';
+import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { toast } from 'sonner';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = initializeFirestore(app, {
+  ignoreUndefinedProperties: true
+}, firebaseConfig.firestoreDatabaseId);
 export const storage = getStorage(app);
 
 // Secondary app for admin tasks (creating users without logging out current admin)
 const adminApp = initializeApp(firebaseConfig, 'AdminApp');
 export const adminAuth = getAuth(adminApp);
+setPersistence(adminAuth, inMemoryPersistence).catch(err => {
+  console.error('Failed to set inMemoryPersistence for adminAuth:', err);
+});
 
 // Connection test
 async function testConnection() {
@@ -85,5 +90,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   }
 
   console.error('Firestore Error: ', JSON.stringify(errInfo));
+  
+  // Do not throw on list or get operations to avoid uncaught exceptions crashing async snapshot listeners
+  if (operationType === OperationType.LIST || operationType === OperationType.GET) {
+    return;
+  }
+  
   throw new Error(JSON.stringify(errInfo));
 }

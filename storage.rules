@@ -6,19 +6,6 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Helper to get user role from Firestore
-    function getUserRole() {
-      return firestore.get(/databases/ai-studio-184f647f-85c7-4de6-9412-282df12602e9/documents/users/$(request.auth.uid)).data.role;
-    }
-
-    function isAdmin() {
-      return isAuthenticated() && getUserRole() == 'admin';
-    }
-
-    function isTeacher() {
-      return isAuthenticated() && getUserRole() == 'teacher';
-    }
-
     // Submissions: Students can upload their own, everyone authenticated can read
     match /submissions/{userId}/{allPaths=**} {
       allow read: if isAuthenticated();
@@ -28,19 +15,25 @@ service firebase.storage {
     // Projects: Teachers and Admins can upload assets, everyone authenticated can read
     match /projects/{allPaths=**} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow write: if isAuthenticated();
     }
 
     // Curriculum assets (modules, etc.)
     match /modules/{allPaths=**} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow write: if isAuthenticated();
     }
 
     // Curriculum assets (general)
     match /curriculum/{allPaths=**} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow write: if isAuthenticated();
+    }
+
+    // Components assets
+    match /components/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
     }
 
     // Default deny

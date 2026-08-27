@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './AuthContext';
-import { LogOut, BookOpen, Users, ClipboardList, LayoutDashboard, Settings as SettingsIcon, Menu, X, Plus, ExternalLink, Camera, LayoutGrid, Wallet, ChevronDown, ShieldAlert, GraduationCap, Eye, RefreshCw } from 'lucide-react';
+import { auth } from './firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { LogOut, BookOpen, Users, ClipboardList, LayoutDashboard, Settings as SettingsIcon, Menu, X, Plus, ExternalLink, Camera, LayoutGrid, Wallet, ChevronDown, ShieldAlert, GraduationCap, Eye, EyeOff, RefreshCw, Trophy, Cpu, Sun, Moon, ArrowLeft, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './lib/utils';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
+import { logAudit } from './lib/audit';
 
 // --- Pages ---
 import Schools from './pages/Schools';
@@ -19,8 +22,15 @@ import StudentDashboard from './pages/StudentDashboard';
 import ContentManager from './pages/ContentManager';
 import AttendancePage from './pages/Attendance';
 import ReportsPage from './pages/Reports';
+import StudentSubmissions from './pages/StudentSubmissions';
 import StudentsPage from './pages/Students';
 import Expenses from './pages/Expenses';
+import LeaderboardEvent from './pages/LeaderboardEvent';
+import SimulationLab from './pages/SimulationLab';
+import AdminCurriculum from './pages/AdminCurriculum';
+import Photos from './pages/Photos';
+import Chapter from './pages/Chapter';
+import TeachingPanel from './pages/TeachingPanel';
 
 // --- Components ---
 
@@ -38,63 +48,143 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
+  const [theme, setTheme] = useState<'day' | 'night'>(() => {
+    const saved = localStorage.getItem('funscholar_theme');
+    return (saved === 'day' || saved === 'night') ? saved : 'night';
+  });
+
+  useEffect(() => {
+    if (theme === 'day') {
+      document.body.classList.add('light-theme');
+    } else {
+      document.body.classList.remove('light-theme');
+    }
+    localStorage.setItem('funscholar_theme', theme);
+  }, [theme]);
+
+  // Automatically log what pages teachers/users view
+  useEffect(() => {
+    if (profile) {
+      const path = location.pathname;
+      let pageName = '';
+      if (path === '/') {
+        pageName = 'Dashboard Home';
+      } else if (path === '/schools') {
+        pageName = 'Schools List';
+      } else if (path === '/teachers') {
+        pageName = 'Teachers Roster';
+      } else if (path === '/students') {
+        pageName = 'Students Roster';
+      } else if (path === '/content') {
+        pageName = 'Curriculum Manager';
+      } else if (path === '/courses') {
+        pageName = 'My Courses';
+      } else if (path === '/submissions') {
+        pageName = 'Student Submissions';
+      } else if (path === '/projects') {
+        pageName = 'Student Projects';
+      } else if (path === '/logs') {
+        pageName = 'Teacher Logbooks';
+      } else if (path === '/teaching-panel') {
+        pageName = 'Teaching Panel';
+      } else if (path === '/reports') {
+        pageName = 'System Audit Reports';
+      } else if (path === '/expenses') {
+        pageName = 'Travel Expenses';
+      } else if (path === '/leaderboard-event') {
+        pageName = 'Leaderboard Arena';
+      } else if (path === '/simulation-lab') {
+        pageName = 'Wokwi Microcontroller Simulator';
+      } else if (path === '/photos') {
+        pageName = 'Photos Module';
+      } else if (path === '/settings') {
+        pageName = 'Settings & Profile';
+      } else {
+        pageName = `Page ${path}`;
+      }
+
+      if (path && path !== '/login') {
+        logAudit(profile, 'Open Page', `Viewed the ${pageName}`, { path });
+      }
+    }
+  }, [location.pathname, profile?.uid]);
 
   if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-[#050505] text-white">Loading...</div>;
-  if (!profile) return <Navigate to="/login" />;
+  if (!profile) {
+    const currentPath = location.pathname + location.search;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(currentPath)}`} replace />;
+  }
 
   const role = profile.role;
 
   // Custom filtering based on Role and Administrative Authority
   const getLinks = () => {
     if (role === 'admin') {
-      const sub = profile.adminSubRole || 'Super Admin';
-      if (sub === 'User Manager Admin') {
-        return [
-          { name: 'Schools', path: '/schools', icon: Users },
-          { name: 'Teachers', path: '/teachers', icon: Users },
-          { name: 'Students', path: '/students', icon: Users },
-          { name: 'Reports', path: '/reports', icon: ClipboardList },
-          { name: 'Settings', path: '/settings', icon: SettingsIcon },
-        ];
-      } else if (sub === 'Curriculum Admin') {
-        return [
-          { name: 'Curriculum', path: '/content', icon: BookOpen },
-          { name: 'Expenses', path: '/expenses', icon: Wallet },
-          { name: 'Settings', path: '/settings', icon: SettingsIcon },
-        ];
-      } else {
-        // Super Admin
-        return [
-          { name: 'Schools', path: '/schools', icon: Users },
-          { name: 'Teachers', path: '/teachers', icon: Users },
-          { name: 'Students', path: '/students', icon: Users },
-          { name: 'Curriculum', path: '/content', icon: BookOpen },
-          { name: 'Reports', path: '/reports', icon: ClipboardList },
-          { name: 'Expenses', path: '/expenses', icon: Wallet },
-          { name: 'Settings', path: '/settings', icon: SettingsIcon },
-        ];
+      const isSuper = profile.adminSubRole === 'Super Admin';
+      const list = [
+        { name: 'Home', path: '/', icon: LayoutDashboard }
+      ];
+      
+      if (isSuper || profile.canAddSchool) {
+        list.push({ name: 'Schools', path: '/schools', icon: Users });
       }
+      if (isSuper || profile.canAddTeacher) {
+        list.push({ name: 'Teachers', path: '/teachers', icon: Users });
+      }
+      if (isSuper || profile.canAddStudent) {
+        list.push({ name: 'Students', path: '/students', icon: Users });
+      }
+      if (isSuper || profile.canManageContent) {
+        list.push({ name: 'Curriculum', path: '/content', icon: BookOpen });
+      }
+      if (isSuper || profile.canAddStudent || profile.canAddTeacher) {
+        list.push({ name: 'Reports', path: '/reports', icon: ClipboardList });
+      }
+      if (isSuper || profile.canManageContent || profile.canAddTeacher) {
+        list.push({ name: 'Expenses', path: '/expenses', icon: Wallet });
+      }
+      list.push({ name: 'School-wise Curriculum', path: '/admin-curriculum', icon: BookOpen });
+      list.push({ name: "Teacher's Logbooks", path: '/logs', icon: ClipboardList });
+      list.push({ name: 'Leaderboard Arena', path: '/leaderboard-event', icon: Trophy });
+      list.push({ name: 'Wokwi Simulator', path: '/simulation-lab', icon: Cpu });
+      list.push({ name: 'Photos', path: '/photos', icon: Camera });
+      // Settings is always visible for viewing profile or switching simulation views
+      list.push({ name: 'Settings', path: '/settings', icon: SettingsIcon });
+      
+      return list;
     }
 
     if (role === 'teacher') {
       return [
+        { name: 'Home', path: '/', icon: LayoutDashboard },
+        { name: 'Teaching Panel', path: '/teaching-panel', icon: GraduationCap },
         { name: 'My Courses', path: '/courses', icon: BookOpen },
-        { name: 'Attendance', path: '/attendance', icon: Users },
+        { name: 'Student Submissions', path: '/submissions', icon: ClipboardList },
         { name: 'Content Control', path: '/content', icon: LayoutGrid },
+        { name: 'Leaderboard Arena', path: '/leaderboard-event', icon: Trophy },
+        { name: 'Wokwi Simulator', path: '/simulation-lab', icon: Cpu },
         { name: 'Logs', path: '/logs', icon: ClipboardList },
         { name: 'Travel Expenses', path: '/expenses', icon: Wallet },
+        { name: 'Photos', path: '/photos', icon: Camera },
         { name: 'Settings', path: '/settings', icon: SettingsIcon },
       ];
     }
 
     if (role === 'student') {
       return [
+        { name: 'Home', path: '/', icon: LayoutDashboard },
+        { name: 'Leaderboard Arena', path: '/leaderboard-event', icon: Trophy },
         { name: 'My Projects', path: '/projects', icon: ClipboardList },
+        { name: 'Wokwi Simulator', path: '/simulation-lab', icon: Cpu },
         { name: 'Settings', path: '/settings', icon: SettingsIcon },
       ];
     }
 
-    return [{ name: 'Settings', path: '/settings', icon: SettingsIcon }];
+    return [
+      { name: 'Home', path: '/', icon: LayoutDashboard },
+      { name: 'Wokwi Simulator', path: '/simulation-lab', icon: Cpu },
+      { name: 'Settings', path: '/settings', icon: SettingsIcon }
+    ];
   };
 
   const links = getLinks();
@@ -151,6 +241,15 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         </Link>
 
         <div className="flex items-center gap-3">
+          {/* Day/Night Mode Toggle */}
+          <button
+            onClick={() => setTheme(theme === 'day' ? 'night' : 'day')}
+            className="flex items-center justify-center p-2 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+            title={theme === 'day' ? "Switch to Night Mode (Dark)" : "Switch to Day Mode (Light)"}
+          >
+            {theme === 'day' ? <Moon size={15} className="text-[#F27D26]" /> : <Sun size={15} className="text-[#F27D26]" />}
+          </button>
+
           {/* Creator Role Selector Trigger Widget */}
           {(realRole === 'admin' || (profile?.roles && profile.roles.length > 1)) && (
             <div className="relative">
@@ -272,10 +371,19 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           )}
 
           {/* Rights Display & User Info */}
-          <div className="flex items-center gap-3 bg-white/[0.02] border border-white/5 py-1 px-3 rounded-xl">
-            <span className={cn("px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded border", badge.color)}>
-              {badge.title}
-            </span>
+          <div className="flex items-center gap-3 bg-white/[0.02] border border-white/5 py-1.5 px-3 rounded-xl">
+            {profile?.photoUrl ? (
+              <img 
+                src={profile.photoUrl} 
+                alt={profile.name || 'User'} 
+                className="w-7 h-7 rounded-full object-cover border border-[#F27D26]/40 shadow-sm hover:scale-105 transition-transform" 
+                referrerPolicy="no-referrer" 
+              />
+            ) : (
+              <span className={cn("px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded border", badge.color)}>
+                {badge.title}
+              </span>
+            )}
             <div className="hidden md:flex flex-col text-left leading-none">
               <span className="text-[10px] font-bold text-white/80">{profile.name || 'User'}</span>
               <span className="text-[8px] text-white/40 font-mono mt-0.5">{profile.email}</span>
@@ -391,25 +499,90 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
 const Login = () => {
   const { login, loginWithEmail, profile } = useAuth();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const redirectPath = searchParams.get('redirect') || '/';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (profile) return <Navigate to="/" />;
+  // Password Reset Request State
+  const [isRequestingReset, setIsRequestingReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [sendingRequest, setSendingRequest] = useState(false);
+  const [requestSent, setRequestSent] = useState(false);
+
+  if (profile) return <Navigate to={redirectPath} replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await loginWithEmail(email, password);
+      await loginWithEmail(email, password, rememberMe);
     } catch (err: any) {
-      setError(err.message);
+      console.error("Login failed:", err);
+      // Map standard firebase errors or dummy accounts issues to "Incorrect password"
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
+        setError('Incorrect password. If you forgot your password, please request a password reset below.');
+      } else {
+        setError('Incorrect password. Please verify your credentials.');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const handleSendResetRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail) return;
+    setSendingRequest(true);
+    setError('');
+    let firebaseEmailSent = false;
+    
+    // 1. Try sending the native password reset email via Firebase Auth first
+    try {
+      await sendPasswordResetEmail(auth, resetEmail.trim().toLowerCase());
+      firebaseEmailSent = true;
+    } catch (firebaseErr: any) {
+      console.warn("Firebase native sendPasswordResetEmail failed:", firebaseErr);
+    }
+
+    // 2. Submit to the admin panel database (Firestore) so the admin is notified and has it in their logs
+    try {
+      const res = await fetch('/api/auth/request-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit request');
+      
+      setRequestSent(true);
+      if (firebaseEmailSent) {
+        toast.success('A password reset link has been emailed to you via Firebase! An admin request has also been logged.');
+      } else {
+        toast.success('Admin password reset request logged successfully!');
+      }
+    } catch (err: any) {
+      console.error("Failed to send reset request:", err);
+      // If Firebase email succeeded but server database sync failed, we still consider it a success!
+      if (firebaseEmailSent) {
+        setRequestSent(true);
+        toast.success('A password reset link was emailed to you by Firebase!');
+      } else {
+        setError(err.message || 'Failed to send request. Please try again.');
+      }
+    } finally {
+      setSendingRequest(false);
+    }
+  };
+
+  const mailtoUrl = `mailto:risheb@funscholar.com?subject=FunScholar Password Reset Request&body=Hi Admin,%0D%0DPlease reset the password for my FunScholar account:%0DEmail: ${encodeURIComponent(resetEmail || email)}%0D%0DThank you!`;
 
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-[#050505] relative overflow-hidden">
@@ -425,51 +598,197 @@ const Login = () => {
         >
           FUN<span className="text-[#F27D26]">SCHOLAR</span>
         </motion.h1>
-        <p className="text-white/60 mb-8 text-lg font-light">
-          Sign in to your account
-        </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mb-6">
-          <input
-            type="email"
-            placeholder="Email Address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-[#F27D26] text-white"
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-[#F27D26] text-white"
-            required
-          />
-          
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-4 bg-[#F27D26] text-white rounded-xl font-bold text-lg hover:bg-[#d66a1e] transition-all disabled:opacity-50"
-          >
-            {loading ? 'Processing...' : 'Sign In'}
-          </button>
-        </form>
+        {!isRequestingReset ? (
+          <>
+            <p className="text-white/60 mb-8 text-lg font-light">
+              Sign in to your account
+            </p>
 
-        <div className="flex items-center gap-4 mb-6">
-          <div className="flex-1 h-px bg-white/10" />
-          <span className="text-white/40 text-sm">OR</span>
-          <div className="flex-1 h-px bg-white/10" />
-        </div>
+            <form onSubmit={handleSubmit} className="space-y-4 mb-6">
+              <input
+                type="email"
+                placeholder="Email Address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-[#F27D26] text-white"
+                required
+              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-[#F27D26] text-white pr-12"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors cursor-pointer p-1 rounded hover:bg-white/5"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              
+              <div className="flex items-center gap-2.5 px-1 py-0.5 text-left">
+                <input
+                  type="checkbox"
+                  id="rememberMe"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-white/15 bg-white/5 text-[#F27D26] focus:ring-0 focus:ring-offset-0 accent-[#F27D26] cursor-pointer"
+                />
+                <label htmlFor="rememberMe" className="text-white/60 hover:text-white text-xs select-none cursor-pointer font-medium">
+                  Remember Me (Stay logged in for 30–90 days)
+                </label>
+              </div>
 
-        <button
-          onClick={login}
-          className="w-full py-4 bg-white/5 border border-white/10 text-white rounded-xl font-bold text-lg hover:bg-white/10 transition-all"
-        >
-          Sign in with Google
-        </button>
+              {error && (
+                <div className="text-left bg-red-500/10 border border-red-500/20 rounded-xl p-3.5 space-y-2">
+                  <p className="text-red-400 text-xs font-semibold leading-relaxed">{error}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetEmail(email);
+                      setIsRequestingReset(true);
+                      setError('');
+                    }}
+                    className="text-[#F27D26] hover:text-[#d66a1e] font-bold text-xs underline cursor-pointer"
+                  >
+                    Reset Password via Admin Request →
+                  </button>
+                </div>
+              )}
+              
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4 bg-[#F27D26] text-white rounded-xl font-bold text-lg hover:bg-[#d66a1e] transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {loading ? 'Processing...' : 'Sign In'}
+              </button>
+            </form>
+
+            <div className="flex justify-between items-center px-1 mb-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setResetEmail(email);
+                  setIsRequestingReset(true);
+                  setError('');
+                }}
+                className="text-white/40 hover:text-white text-xs font-semibold transition-colors cursor-pointer hover:underline"
+              >
+                Forgot Password?
+              </button>
+            </div>
+
+            <div className="flex items-center gap-4 mb-6">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-white/40 text-sm">OR</span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+
+            <button
+              onClick={() => login(rememberMe)}
+              className="w-full py-4 bg-white/5 border border-white/10 text-white rounded-xl font-bold text-lg hover:bg-white/10 transition-all cursor-pointer"
+            >
+              Sign in with Google
+            </button>
+          </>
+        ) : (
+          <div className="bg-[#151619] border border-white/5 rounded-2xl p-6 text-left space-y-4">
+            <div className="flex items-center gap-2 text-white/40">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRequestingReset(false);
+                  setRequestSent(false);
+                  setError('');
+                }}
+                className="hover:text-white transition-colors p-1 rounded hover:bg-white/5 flex items-center gap-1 text-xs cursor-pointer"
+              >
+                <ArrowLeft size={14} /> Back to Sign In
+              </button>
+            </div>
+
+            <h2 className="text-xl font-bold text-white font-sans tracking-tight">Reset Account Password</h2>
+            <p className="text-white/60 text-xs leading-relaxed">
+              If you cannot receive normal reset emails or use a specialized login email, you can send a password reset request directly to the system administrator.
+            </p>
+
+            {!requestSent ? (
+              <form onSubmit={handleSendResetRequest} className="space-y-4 pt-2">
+                <div>
+                  <label className="text-[10px] text-white/50 uppercase tracking-wider font-semibold block mb-1">
+                    Your Registered Email Address
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="e.g. user@school.com"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    className="w-full px-4 py-3 bg-[#050505] border border-white/10 rounded-xl focus:outline-none focus:border-[#F27D26] text-white"
+                    required
+                  />
+                </div>
+
+                {error && <p className="text-red-500 text-xs">{error}</p>}
+
+                <button
+                  type="submit"
+                  disabled={sendingRequest}
+                  className="w-full py-3.5 bg-[#F27D26] text-white rounded-xl font-bold hover:bg-[#d66a1e] transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Mail size={16} />
+                  {sendingRequest ? 'Submitting Request...' : 'Send Reset Request to Admin'}
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-4 pt-2 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-green-500/15 border border-green-500/30 flex items-center justify-center text-green-400">
+                  <Mail size={20} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-green-400 font-bold text-sm">Reset Link & Ticket Created!</p>
+                  <p className="text-white/60 text-xs">
+                    We have requested an automated Firebase password reset link for your email address. Please check your inbox and spam folder.
+                  </p>
+                  <p className="text-white/40 text-[11px]">
+                    Additionally, your ticket has been successfully registered in the Admin Panel database.
+                  </p>
+                </div>
+
+                <div className="bg-white/[0.02] border border-white/5 p-4 rounded-xl text-left space-y-2">
+                  <p className="text-[11px] text-white/50 font-medium">
+                    If your account email is not configured to receive mail, or to ensure immediate attention from the administrator at <span className="text-white/80 font-bold font-sans">risheb@funscholar.com</span>, you can also send a direct notification:
+                  </p>
+                  
+                  <a
+                    href={mailtoUrl}
+                    className="w-full py-2.5 bg-white/5 border border-white/10 text-white rounded-lg font-bold text-xs hover:bg-white/10 transition-all flex items-center justify-center gap-2 hover:border-[#F27D26]/40 text-center cursor-pointer"
+                  >
+                    <ExternalLink size={12} className="text-[#F27D26]" />
+                    Send Email to risheb@funscholar.com
+                  </a>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRequestingReset(false);
+                    setRequestSent(false);
+                  }}
+                  className="w-full py-3 bg-white/5 border border-white/10 text-white rounded-xl font-bold hover:bg-white/10 transition-all text-xs cursor-pointer"
+                >
+                  Return to Sign In
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         
         <p className="mt-8 text-white/20 text-[10px] uppercase font-bold tracking-widest">
           Private Access Only
@@ -558,6 +877,15 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 }
 
 export default function App() {
+  useEffect(() => {
+    const saved = localStorage.getItem('funscholar_theme');
+    if (saved === 'day') {
+      document.body.classList.add('light-theme');
+    } else {
+      document.body.classList.remove('light-theme');
+    }
+  }, []);
+
   return (
     <ErrorBoundary>
       <AuthProvider>
@@ -571,11 +899,18 @@ export default function App() {
             <Route path="/students" element={<Layout><StudentsPage /></Layout>} />
             <Route path="/courses" element={<Layout><Courses /></Layout>} />
             <Route path="/attendance" element={<Layout><AttendancePage /></Layout>} />
+            <Route path="/submissions" element={<Layout><StudentSubmissions /></Layout>} />
             <Route path="/content" element={<Layout><ContentManager /></Layout>} />
             <Route path="/reports" element={<Layout><ReportsPage /></Layout>} />
             <Route path="/logs" element={<Layout><Logs /></Layout>} />
+            <Route path="/teaching-panel" element={<Layout><TeachingPanel /></Layout>} />
             <Route path="/expenses" element={<Layout><Expenses /></Layout>} />
             <Route path="/projects" element={<Layout><Projects /></Layout>} />
+            <Route path="/leaderboard-event" element={<Layout><LeaderboardEvent /></Layout>} />
+            <Route path="/simulation-lab" element={<Layout><SimulationLab /></Layout>} />
+            <Route path="/admin-curriculum" element={<Layout><AdminCurriculum /></Layout>} />
+            <Route path="/photos" element={<Layout><Photos /></Layout>} />
+            <Route path="/chapter/:id" element={<Layout><Chapter /></Layout>} />
             <Route path="/settings" element={<Layout><Settings /></Layout>} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

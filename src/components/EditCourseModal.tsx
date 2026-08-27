@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Course } from '../types';
+import { Course, School } from '../types';
 import { X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -13,11 +13,12 @@ export const SUB_CATEGORIES: Record<string, string[]> = {
 
 interface EditCourseModalProps {
   course: Course | null;
+  schools: School[];
   onClose: () => void;
-  onUpdate: (courseId: string, updates: { title: string; grade: number; description: string; ageRange: string; courseType: string; subCategory?: string; difficulty: string }) => Promise<void>;
+  onUpdate: (courseId: string, updates: { title: string; grade: number; description: string; ageRange: string; courseType: string; subCategory?: string; difficulty: string; schoolId?: string }) => Promise<void>;
 }
 
-export default function EditCourseModal({ course, onClose, onUpdate }: EditCourseModalProps) {
+export default function EditCourseModal({ course, schools, onClose, onUpdate }: EditCourseModalProps) {
   const [title, setTitle] = useState('');
   const [grade, setGrade] = useState(1);
   const [description, setDescription] = useState('');
@@ -25,6 +26,7 @@ export default function EditCourseModal({ course, onClose, onUpdate }: EditCours
   const [courseType, setCourseType] = useState('Robotics');
   const [subCategory, setSubCategory] = useState('');
   const [difficulty, setDifficulty] = useState('Beginner');
+  const [schoolId, setSchoolId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -37,6 +39,7 @@ export default function EditCourseModal({ course, onClose, onUpdate }: EditCours
       setCourseType(type);
       setSubCategory(course.subCategory || (SUB_CATEGORIES[type]?.[0] || ''));
       setDifficulty(course.difficulty || 'Beginner');
+      setSchoolId(course.schoolId || '');
     }
   }, [course]);
 
@@ -59,7 +62,8 @@ export default function EditCourseModal({ course, onClose, onUpdate }: EditCours
         ageRange,
         courseType,
         subCategory,
-        difficulty
+        difficulty,
+        schoolId
       });
       onClose();
     } catch (err) {
@@ -100,32 +104,18 @@ export default function EditCourseModal({ course, onClose, onUpdate }: EditCours
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">Target Grade (1-12)</label>
-              <input
-                type="number"
-                min="1"
-                max="12"
-                required
-                value={grade}
-                onChange={(e) => setGrade(Number(e.target.value))}
-                className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26]"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">Target Age</label>
-              <select
-                value={ageRange}
-                onChange={(e) => setAgeRange(e.target.value)}
-                className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26]"
-              >
-                <option value="6-8">Age 6-8</option>
-                <option value="9-11">Age 9-11</option>
-                <option value="12-14">Age 12-14</option>
-                <option value="15+">Age 15+</option>
-              </select>
-            </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">Target Age</label>
+            <select
+              value={ageRange}
+              onChange={(e) => setAgeRange(e.target.value)}
+              className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26]"
+            >
+              <option value="6-8">Age 6-8</option>
+              <option value="9-11">Age 9-11</option>
+              <option value="12-14">Age 12-14</option>
+              <option value="15+">Age 15+</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -171,6 +161,21 @@ export default function EditCourseModal({ course, onClose, onUpdate }: EditCours
                 <option value="Advanced">Advanced</option>
               </select>
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold tracking-widest text-[#F27D26]">Assigned School Mapping</label>
+            <select
+              value={schoolId}
+              required
+              onChange={(e) => setSchoolId(e.target.value)}
+              className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26] text-white"
+            >
+              <option value="">Select School</option>
+              {schools.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-1">

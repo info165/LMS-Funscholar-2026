@@ -7,18 +7,22 @@ import {
   signOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  updateProfile
+  updateProfile,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { UserProfile, UserRole } from './types';
+import { logAudit } from './lib/audit';
 
 interface AuthContextType {
   user: User | null;
   profile: (UserProfile & { adminSubRole?: string }) | null;
   loading: boolean;
-  login: () => Promise<void>;
-  loginWithEmail: (email: string, pass: string) => Promise<void>;
+  login: (rememberMe?: boolean) => Promise<void>;
+  loginWithEmail: (email: string, pass: string, rememberMe?: boolean) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   partners: UserProfile[];
@@ -81,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Real-time profile listener
       unsubscribeProfile = onSnapshot(doc(db, 'users', firebaseUser.uid), async (profileDoc) => {
         if (profileDoc.exists()) {
-          const existingProfile = profileDoc.data() as UserProfile;
+          const existingProfile = { uid: profileDoc.id, ...profileDoc.data() } as UserProfile;
           
           // Force admin role for the primary admin email
           const isAdminEmail = firebaseUser.email?.toLowerCase().trim() === 'info@funscholar.com';
@@ -97,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const now = new Date().getTime();
           if (now - lastLogin > 3600000) {
             await setDoc(doc(db, 'users', firebaseUser.uid), { lastLogin: new Date().toISOString() }, { merge: true });
+            logAudit(existingProfile, 'Login', 'Logged in to the platform');
           }
         } else {
           // ONLY create profile automatically for the primary admin email
@@ -140,12 +145,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const login = async () => {
+  const login = async (rememberMe?: boolean) => {
+    if (rememberMe !== undefined) {
+      const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+      await setPersistence(auth, persistence);
+    }
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
   };
 
-  const loginWithEmail = async (email: string, pass: string) => {
+  const loginWithEmail = async (email: string, pass: string, rememberMe?: boolean) => {
+    if (rememberMe !== undefined) {
+      const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+      await setPersistence(auth, persistence);
+    }
     await signInWithEmailAndPassword(auth, email, pass);
   };
 
@@ -173,17 +186,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    if (profile) {
+      await logAudit(profile, 'Logout', 'Logged out of the platform');
+    }
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('funscholar_session_start');
+    }
     await signOut(auth);
   };
 
   const realRole = profile?.role || null;
-  const isCreatorOfSystem = profile?.role === 'admin' || profile?.email?.toLowerCase() === 'info@funscholar.com';
+  const isCreatorOfSystem = profile?.email?.toLowerCase().trim() === 'info@funscholar.com';
   const hasMultipleRoles = isCreatorOfSystem || (profile?.roles && profile.roles.length > 1);
+
+  const getDynamicPermissions = () => {
+    if (!profile) return null;
+    
+    if (isCreatorOfSystem) {
+      if (activeAdminSubRole === 'Super Admin') {
+        return {
+          adminSubRole: 'Super Admin',
+          canAddStudent: true,
+          canAddTeacher: true,
+          canAddSchool: true,
+          canManageContent: true,
+        };
+      } else if (activeAdminSubRole === 'User Manager Admin') {
+        return {
+          adminSubRole: 'User Manager Admin',
+          canAddStudent: true,
+          canAddTeacher: true,
+          canAddSchool: true,
+          canManageContent: false,
+        };
+      } else if (activeAdminSubRole === 'Curriculum Admin') {
+        return {
+          adminSubRole: 'Curriculum Admin',
+          canAddStudent: false,
+          canAddTeacher: false,
+          canAddSchool: false,
+          canManageContent: true,
+        };
+      }
+    }
+    
+    // For other admins, permissions are database-backed on their profile
+    const roleStr = profile.adminSubRole || 'Admin';
+    const isSuperAdmin = roleStr === 'Super Admin';
+    return {
+      adminSubRole: roleStr,
+      canAddStudent: isSuperAdmin || !!profile.canAddStudent,
+      canAddTeacher: isSuperAdmin || !!profile.canAddTeacher,
+      canAddSchool: isSuperAdmin || !!profile.canAddSchool,
+      canManageContent: isSuperAdmin || !!profile.canManageContent,
+    };
+  };
+
+  const dynPerms = getDynamicPermissions();
 
   const computedProfile = profile ? {
     ...profile,
     role: (hasMultipleRoles && activeRole) ? activeRole : profile.role,
-    adminSubRole: (isCreatorOfSystem ? activeAdminSubRole : 'Super Admin')
+    ...(profile.role === 'admin' && dynPerms ? dynPerms : {
+      canAddStudent: false,
+      canAddTeacher: false,
+      canAddSchool: false,
+      canManageContent: false,
+    })
   } : null;
 
   return (

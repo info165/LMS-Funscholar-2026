@@ -2,127 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Document ID: uid
-    // Fields:
-    //   - uid: string (required)
-    //   - name: string (required)
-    //   - email: string (required, email format)
-    //   - role: string (required, enum: admin, teacher, student)
-    //   - schoolIds: list (optional)
-    //   - xp: number (optional)
-    //   - level: number (optional)
-    //
-    // Collection: schools
-    // Document ID: schoolId
-    // Fields:
-    //   - name: string (required)
-    //   - location: string (required)
-    //   - state: string (required)
-    //
-    // Collection: courses
-    // Document ID: courseId
-    // Fields:
-    //   - title: string (required)
-    //   - description: string (optional)
-    //   - grade: number (required)
-    //   - schoolId: string (optional)
-    //   - activated: boolean (optional)
-    //
-    // Collection: modules
-    // Document ID: moduleId
-    // Fields:
-    //   - title: string (required)
-    //   - courseId: string (required)
-    //   - driveUrl: string (optional)
-    //   - videoUrl: string (optional)
-    //   - pptUrl: string (optional)
-    //
-    // Collection: activations
-    // Document ID: activationId
-    // Fields:
-    //   - moduleId: string (required)
-    //   - schoolId: string (required)
-    //   - teacherId: string (required)
-    //   - activated: boolean (required)
-    //
-    // Collection: projects
-    // Document ID: projectId
-    // Fields:
-    //   - title: string (required)
-    //   - description: string (optional)
-    //   - courseId: string (required)
-    //   - moduleId: string (required)
-    //   - driveUrl: string (optional, url format)
-    //   - videoUrl: string (optional)
-    //   - pptUrl: string (optional)
-    //
-    // Collection: submissions
-    // Document ID: submissionId
-    // Fields:
-    //   - projectId: string (required)
-    //   - studentId: string (required)
-    //   - photoUrl: string (optional, url format)
-    //   - videoUrl: string (optional, url format)
-    //   - timestamp: timestamp (required)
-    //   - status: string (required, enum: pending, reviewed)
-    //   - rating: number (optional)
-    //   - feedback: string (optional)
-    //
-    // Collection: attendance
-    // Document ID: attendanceId
-    // Fields:
-    //   - studentId: string (required)
-    //   - schoolId: string (required)
-    //   - teacherId: string (required)
-    //   - date: string (required)
-    //   - status: string (required, enum: present, absent)
-    //   - timestamp: timestamp (required)
-    //
-    // Collection: logs
-    // Document ID: logId
-    // Fields:
-    //   - teacherId: string (required)
-    //   - timestamp: timestamp (required)
-    //   - activity: string (required)
-    //   - duration: number (optional)
-    //
-    // Collection: expenseTemplates
-    // Document ID: templateId
-    // Fields:
-    //   - teacherId: string (required)
-    //   - schoolId: string (required)
-    //   - amount: number (required)
-    //   - description: string (optional)
-    //   - modeOfTransport: string (optional)
-    //
-    // Collection: expenseLogs
-    // Document ID: expenseLogId
-    // Fields:
-    //   - teacherId: string (required)
-    //   - teacherName: string (optional)
-    //   - schoolId: string (required)
-    //   - schoolName: string (optional)
-    //   - amount: number (required)
-    //   - date: string (required)
-    //   - description: string (required)
-    //   - status: string (required, enum: pending, approved, rejected)
-    //   - timestamp: timestamp (required)
-    //
-    // ===============================================================
-
-    // Collection: components
-    // Document ID: componentId
-    // Fields:
-    //   - name: string (required)
-    //   - imageUrl: string (optional, url format)
-    //
-    // ===============================================================
-
-    // ===============================================================
     // Helper Functions
     // ===============================================================
     
@@ -132,7 +11,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        ( (request.auth.token.email.lower() == "info@funscholar.com") ||
+        ( ('email' in request.auth.token && request.auth.token.email.lower() == "info@funscholar.com") ||
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') );
     }
 
@@ -153,7 +32,7 @@ service cloud.firestore {
     }
 
     function isValidUrl(url) {
-      return url is string && (url.size() == 0 || url.matches("^https://.*") || url.matches("^http://.*"));
+      return url is string && (url.size() == 0 || url.matches("^https://.*") || url.matches("^http://.*") || url.matches("^data:.*"));
     }
 
     // ===============================================================
@@ -170,7 +49,17 @@ service cloud.firestore {
              (!('schoolIds' in data) || data.schoolIds is list) &&
              (!('badges' in data) || data.badges is list) &&
              (!('mode' in data) || data.mode is string) &&
-             (!('lastLogin' in data) || data.lastLogin is string);
+             (!('lastLogin' in data) || data.lastLogin is string) &&
+             (!('classSection' in data) || data.classSection is string) &&
+             (!('photoUrl' in data) || data.photoUrl is string) &&
+             (!('setupCompleted' in data) || data.setupCompleted is bool) &&
+             (!('lastActiveModuleId' in data) || data.lastActiveModuleId is string) &&
+             (!('lastActiveStepIdx' in data) || data.lastActiveStepIdx is number) &&
+             (!('lastActiveCourseId' in data) || data.lastActiveCourseId is string) &&
+             (!('lastActiveAt' in data) || data.lastActiveAt is string) &&
+             (!('projectPoints' in data) || data.projectPoints is number) &&
+             (!('quizPoints' in data) || data.quizPoints is number) &&
+             (!('totalPoints' in data) || data.totalPoints is number);
     }
 
     function isValidSchool(data) {
@@ -204,7 +93,49 @@ service cloud.firestore {
              (!('thumbnailUrl' in data) || isValidUrl(data.thumbnailUrl)) &&
              (!('isVisible' in data) || data.isVisible is bool) &&
              (!('files' in data) || data.files is list) &&
+             (!('steps' in data) || data.steps is list) &&
+             (!('quizQuestions' in data) || data.quizQuestions is list) &&
              (!('componentIds' in data) || data.componentIds is list);
+    }
+
+    function isValidProjectTheme(data) {
+      return data.keys().hasAll(['title', 'description', 'month', 'active', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 &&
+             data.description is string &&
+             data.month is string &&
+             data.active is bool &&
+             (!('stepsHtml' in data) || data.stepsHtml is string) &&
+             (!('rewardDescription' in data) || data.rewardDescription is string);
+    }
+
+    function isValidThematicSubmission(data) {
+      return data.keys().hasAll(['themeId', 'studentId', 'photoUrl', 'status', 'timestamp']) &&
+             data.themeId is string &&
+             data.studentId is string &&
+             isValidUrl(data.photoUrl) &&
+             data.status in ['pending', 'approved', 'rejected'] &&
+             (!('themeTitle' in data) || data.themeTitle is string) &&
+             (!('studentName' in data) || data.studentName is string) &&
+             (!('studentEmail' in data) || data.studentEmail is string) &&
+             (!('schoolId' in data) || data.schoolId is string) &&
+             (!('schoolName' in data) || data.schoolName is string) &&
+             (!('classSection' in data) || data.classSection is string) &&
+             (!('description' in data) || data.description is string) &&
+             (!('teacherFeedback' in data) || data.teacherFeedback is string) &&
+             (!('teacherId' in data) || data.teacherId is string) &&
+             (!('teacherName' in data) || data.teacherName is string) &&
+             (!('pointsAwarded' in data) || data.pointsAwarded is number);
+    }
+
+    function isValidQuizAttempt(data) {
+      return data.keys().hasAll(['studentId', 'moduleId', 'score', 'totalQuestions', 'pointsEarned', 'completed', 'timestamp']) &&
+             data.studentId is string &&
+             data.moduleId is string &&
+             data.score is number &&
+             data.totalQuestions is number &&
+             data.pointsEarned is number &&
+             data.completed is bool &&
+             data.timestamp is string;
     }
 
     function isValidActivation(data) {
@@ -235,9 +166,13 @@ service cloud.firestore {
              data.projectId is string &&
              data.studentId is string &&
              ( ('photoUrl' in data && isValidUrl(data.photoUrl)) || ('videoUrl' in data && isValidUrl(data.videoUrl)) ) &&
-             data.status in ['pending', 'reviewed'] &&
+             data.status in ['pending', 'reviewed', 'approved', 'rejected'] &&
              (!('rating' in data) || data.rating is number) &&
-             (!('feedback' in data) || data.feedback is string);
+             (!('feedback' in data) || data.feedback is string) &&
+             (!('schoolId' in data) || data.schoolId is string) &&
+             (!('studentName' in data) || data.studentName is string) &&
+             (!('studentEmail' in data) || data.studentEmail is string) &&
+             (!('projectTitle' in data) || data.projectTitle is string);
     }
 
     function isValidAttendance(data) {
@@ -285,6 +220,30 @@ service cloud.firestore {
              (!('schoolName' in data) || data.schoolName is string);
     }
 
+    function isValidSchoolCurriculum(data) {
+      return data.keys().hasAll(['id', 'schoolId', 'schoolName', 'grade', 'numberOfClasses', 'classes']) &&
+             data.id is string &&
+             data.schoolId is string &&
+             data.schoolName is string &&
+             data.grade is string &&
+             data.numberOfClasses is number &&
+             data.classes is list &&
+             (!('selectedCourseIds' in data) || data.selectedCourseIds is list) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    function isValidCurriculumProgress(data) {
+      return data.keys().hasAll(['id', 'schoolId', 'grade', 'section']) &&
+             data.id is string &&
+             data.schoolId is string &&
+             data.grade is string &&
+             data.section is string &&
+             (!('teacherId' in data) || data.teacherId is string) &&
+             (!('teacherName' in data) || data.teacherName is string) &&
+             (!('statuses' in data) || data.statuses is list) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -294,8 +253,13 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
                     ( (request.resource.data.uid == request.auth.uid && request.resource.data.role == 'student') || isAdmin() );
       allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
-                    ( isOwner(userId) || isAdmin() || (isTeacher() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['xp', 'level', 'badges'])) );
+                    ( isOwner(userId) || isAdmin() || (isTeacher() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['xp', 'level', 'badges', 'projectPoints', 'quizPoints', 'totalPoints'])) );
       allow delete: if isAdmin();
+    }
+
+    match /passwordResetRequests/{requestId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
     }
 
     match /schools/{schoolId} {
@@ -320,6 +284,26 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create, update: if (isAdmin() || isTeacher()) && isValidModule(request.resource.data);
       allow delete: if isAdmin() || isTeacher();
+    }
+
+    match /projectThemes/{themeId} {
+      allow read: if isAuthenticated();
+      allow create, update: if (isAdmin() || isTeacher()) && isValidProjectTheme(request.resource.data);
+      allow delete: if isAdmin() || isTeacher();
+    }
+
+    match /thematicSubmissions/{submissionId} {
+      allow read: if isAuthenticated();
+      allow create: if isStudent() && isValidThematicSubmission(request.resource.data) && request.resource.data.studentId == request.auth.uid;
+      allow update: if (isTeacher() || isAdmin()) && isValidThematicSubmission(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /quizAttempts/{attemptId} {
+      allow read: if isAuthenticated();
+      allow create: if isStudent() && isValidQuizAttempt(request.resource.data) && request.resource.data.studentId == request.auth.uid;
+      allow update: if (isStudent() && request.resource.data.studentId == request.auth.uid && isValidQuizAttempt(request.resource.data)) || isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /activations/{activationId} {
@@ -350,7 +334,7 @@ service cloud.firestore {
     match /logs/{logId} {
       allow read: if isTeacher() || isAdmin();
       allow create: if isTeacher() && isValidLog(request.resource.data) && request.resource.data.teacherId == request.auth.uid;
-      allow update: if isTeacher() && isOwner(resource.data.teacherId) && isValidLog(request.resource.data);
+      allow update: if (isTeacher() && isOwner(resource.data.teacherId) && isValidLog(request.resource.data)) || (isAdmin() && isValidLog(request.resource.data));
       allow delete: if isAdmin();
     }
 
@@ -365,6 +349,48 @@ service cloud.firestore {
       allow create: if (isTeacher() || isAdmin()) && isValidExpenseLog(request.resource.data) && request.resource.data.teacherId == request.auth.uid;
       allow update: if (isAdmin() && isValidExpenseLog(request.resource.data)) || (isOwner(resource.data.teacherId) && resource.data.status == 'pending' && isValidExpenseLog(request.resource.data));
       allow delete: if isAdmin() || (isOwner(resource.data.teacherId) && resource.data.status == 'pending');
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin() || isTeacher();
+    }
+
+    match /simulationLabs/{labId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() || isTeacher();
+      allow delete: if isAdmin() || isTeacher();
+    }
+
+    match /simulationSubmissions/{submissionId} {
+      allow read: if isAuthenticated();
+      allow create: if isStudent() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isAdmin() || isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /classroomActivityPhotos/{submissionId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() || isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /competitionProjectPhotos/{submissionId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() || isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /schoolCurriculums/{curriculumId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidSchoolCurriculum(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /curriculumProgress/{progressId} {
+      allow read: if isAuthenticated();
+      allow create, update: if (isTeacher() || isAdmin()) && isValidCurriculumProgress(request.resource.data);
+      allow delete: if isAdmin();
     }
   }
 }

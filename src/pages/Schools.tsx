@@ -4,8 +4,13 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { School } from '../types';
 import { Plus, Trash2, MapPin, Edit2, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '../AuthContext';
+import { logAudit } from '../lib/audit';
 
 export default function Schools() {
+  const { profile } = useAuth();
+  const canManage = profile?.role === 'admin' && (profile?.adminSubRole === 'Super Admin' || !!profile?.canAddSchool);
+
   const [schools, setSchools] = useState<School[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSchool, setEditingSchool] = useState<School | null>(null);
@@ -46,9 +51,11 @@ export default function Schools() {
       if (editingSchool) {
         await updateDoc(doc(db, 'schools', editingSchool.id), formData);
         toast.success('School updated successfully');
+        logAudit(profile, 'Edit School', `Updated school details for: ${formData.name}`, { schoolId: editingSchool.id, ...formData });
       } else {
-        await addDoc(collection(db, 'schools'), formData);
+        const docRef = await addDoc(collection(db, 'schools'), formData);
         toast.success('School added successfully');
+        logAudit(profile, 'Add School', `Created new school: ${formData.name}`, { schoolId: docRef.id, ...formData });
       }
       setIsModalOpen(false);
       setFormData({ name: '', location: '', state: '' });
@@ -61,9 +68,11 @@ export default function Schools() {
 
   const handleDeleteSchool = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this school?')) return;
+    const schoolName = schools.find(s => s.id === id)?.name || id;
     try {
       await deleteDoc(doc(db, 'schools', id));
       toast.success('School deleted successfully');
+      logAudit(profile, 'Delete School', `Deleted school: ${schoolName}`, { schoolId: id });
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `schools/${id}`);
     }
@@ -76,18 +85,20 @@ export default function Schools() {
           <h2 className="text-4xl font-bold tracking-tight">Schools Management</h2>
           <p className="text-white/50 font-mono text-xs uppercase tracking-widest mt-2">Map schools to the LMS</p>
         </div>
-        <button
-          onClick={handleOpenAddModal}
-          className="flex items-center gap-2 bg-[#F27D26] text-white px-6 py-3 rounded-xl font-bold hover:bg-[#d66a1e] transition-all"
-        >
-          <Plus size={20} />
-          Add New School
-        </button>
+        {canManage && (
+          <button
+            onClick={handleOpenAddModal}
+            className="flex items-center gap-2 bg-[#F27D26] text-white px-6 py-3 rounded-xl font-bold hover:bg-[#d66a1e] transition-all"
+          >
+            <Plus size={20} />
+            Add New School
+          </button>
+        )}
       </header>
 
       {/* School Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
           <div className="bg-[#151619] border border-white/10 rounded-2xl w-full max-w-md overflow-hidden">
             <div className="p-6 border-b border-white/5 flex justify-between items-center">
               <h3 className="text-xl font-bold">{editingSchool ? 'Edit School' : 'Add New School'}</h3>
@@ -95,7 +106,7 @@ export default function Schools() {
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleSaveSchool} className="p-6 space-y-4">
+            <form onSubmit={handleSaveSchool} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
               <div>
                 <label className="block text-xs font-bold text-white/40 uppercase tracking-widest mb-2">School Name</label>
                 <input
@@ -155,22 +166,24 @@ export default function Schools() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleOpenEditModal(school)}
-                  className="p-2 text-white/20 hover:text-[#F27D26] transition-colors"
-                  title="Edit School"
-                >
-                  <Edit2 size={18} />
-                </button>
-                <button
-                  onClick={() => handleDeleteSchool(school.id)}
-                  className="p-2 text-white/20 hover:text-red-500 transition-colors"
-                  title="Delete School"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
+              {canManage && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleOpenEditModal(school)}
+                    className="p-2 text-white/20 hover:text-[#F27D26] transition-colors"
+                    title="Edit School"
+                  >
+                    <Edit2 size={18} />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSchool(school.id)}
+                    className="p-2 text-white/20 hover:text-red-500 transition-colors"
+                    title="Delete School"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}

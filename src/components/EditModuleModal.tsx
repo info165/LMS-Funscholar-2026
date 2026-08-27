@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Course, Module, Component, ContentFile, ModuleStep } from '../types';
+import { Course, Module, Component, ContentFile, ModuleStep, QuizQuestion } from '../types';
 import { X, Upload, Plus, Trash2, LayoutGrid, ChevronRight, FileVideo, File as FileGeneric, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -25,34 +25,77 @@ export default function EditModuleModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [driveUrl, setDriveUrl] = useState('');
+  const [videoUrl, setVideoUrl] = useState('');
+  const [pptUrl, setPptUrl] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [courseId, setCourseId] = useState('');
   const [componentIds, setComponentIds] = useState<string[]>([]);
   const [files, setFiles] = useState<ContentFile[]>([]);
   const [steps, setSteps] = useState<ModuleStep[]>([]);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   
   const [newFilesToUpload, setNewFilesToUpload] = useState<{ file: File; type: 'video' | 'pdf' | 'ppt' | 'image' | 'doc' }[]>([]);
   const [newStepFiles, setNewStepFiles] = useState<{ [key: string]: File }>({}); 
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
+  const [tempCodeTitle, setTempCodeTitle] = useState('');
+  const [tempCodeContent, setTempCodeContent] = useState('');
+
+  // Local helper states for link inputs in the UI
+  const [linkTitleVal, setLinkTitleVal] = useState('');
+  const [linkUrlVal, setLinkUrlVal] = useState('');
+  const [linkTypeVal, setLinkTypeVal] = useState<'video' | 'pdf'>('video');
+
   useEffect(() => {
     if (module) {
       setTitle(module.title || '');
       setDescription(module.description || '');
       setDriveUrl(module.driveUrl || '');
+      setVideoUrl(module.videoUrl || '');
+      setPptUrl(module.pptUrl || '');
       setThumbnailUrl(module.thumbnailUrl || '');
       setCourseId(module.courseId || '');
       setComponentIds(module.componentIds || []);
       setFiles(module.files || []);
       setSteps(module.steps || []);
+      setQuizQuestions(module.quizQuestions || []);
       setThumbnailFile(null);
       setNewFilesToUpload([]);
       setNewStepFiles({});
       setUploadProgress(0);
     }
   }, [module]);
+
+  const handleAddQuizQuestion = () => {
+    const newQuestion: QuizQuestion = {
+      id: 'q_' + Math.random().toString(36).substr(2, 9),
+      question: '',
+      options: ['', '', '', ''],
+      correctOptionIdx: 0
+    };
+    setQuizQuestions(prev => [...prev, newQuestion]);
+  };
+
+  const handleUpdateQuizQuestion = (id: string, updates: Partial<QuizQuestion>) => {
+    setQuizQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } as QuizQuestion : q));
+  };
+
+  const handleUpdateQuizOption = (qId: string, optIdx: number, val: string) => {
+    setQuizQuestions(prev => prev.map(q => {
+      if (q.id === qId) {
+        const newOptions = [...q.options];
+        newOptions[optIdx] = val;
+        return { ...q, options: newOptions };
+      }
+      return q;
+    }));
+  };
+
+  const handleRemoveQuizQuestion = (id: string) => {
+    setQuizQuestions(prev => prev.filter(q => q.id !== id));
+  };
 
   if (!module) return null;
 
@@ -70,13 +113,23 @@ export default function EditModuleModal({
     toast.success('Applied standard project structure template');
   };
 
-  const handleAddStep = () => {
+  const handleAddStep = (afterStepId?: string) => {
     const newStep: ModuleStep = {
       id: 'step_' + Math.random().toString(36).substr(2, 9),
       title: '',
       content: ''
     };
-    setSteps(prev => [...prev, newStep]);
+    if (afterStepId && typeof afterStepId === 'string') {
+      setSteps(prev => {
+        const index = prev.findIndex(s => s.id === afterStepId);
+        if (index === -1) return [...prev, newStep];
+        const next = [...prev];
+        next.splice(index + 1, 0, newStep);
+        return next;
+      });
+    } else {
+      setSteps(prev => [...prev, newStep]);
+    }
   };
 
   const handleUpdateStep = (id: string, updates: Partial<ModuleStep>) => {
@@ -121,7 +174,19 @@ export default function EditModuleModal({
     setIsSaving(true);
     setUploadProgress(10);
     try {
-      let finalThumbnailUrl = thumbnailUrl;
+      const sanitizeInputUrl = (urlStr: string): string => {
+        const trimmed = (urlStr || '').trim();
+        if (!trimmed) return '';
+        if (/^(https?|data):/i.test(trimmed)) {
+          return trimmed;
+        }
+        if (trimmed.includes('.')) {
+          return `https://${trimmed}`;
+        }
+        return '';
+      };
+
+      let finalThumbnailUrl = thumbnailUrl || '';
       if (thumbnailFile) {
         setUploadProgress(20);
         const ext = thumbnailFile.name.split('.').pop();
@@ -129,7 +194,7 @@ export default function EditModuleModal({
       }
 
       setUploadProgress(40);
-      const uploadedFiles: ContentFile[] = [...files];
+      const uploadedFiles: ContentFile[] = [...(files || [])];
       for (let i = 0; i < newFilesToUpload.length; i++) {
         const item = newFilesToUpload[i];
         setUploadProgress(40 + Math.floor((i / newFilesToUpload.length) * 30));
@@ -145,36 +210,78 @@ export default function EditModuleModal({
 
       setUploadProgress(70);
       const finalSteps: ModuleStep[] = [];
-      const stepEntries = Object.entries(newStepFiles);
-      for (let i = 0; i < steps.length; i++) {
-        const step = steps[i];
+      const stepsToProcess = steps || [];
+      for (let i = 0; i < stepsToProcess.length; i++) {
+        const step = stepsToProcess[i];
         let imageUrl = step.imageUrl || '';
         if (newStepFiles[step.id]) {
-          setUploadProgress(70 + Math.floor((i / steps.length) * 20));
+          setUploadProgress(70 + Math.floor((i / stepsToProcess.length) * 20));
           const file = newStepFiles[step.id];
           const ext = file.name.split('.').pop();
           imageUrl = await uploadFile(file, `modules/${courseId}/steps/${step.id}_${Date.now()}.${ext}`);
         }
-        finalSteps.push({ ...step, imageUrl });
+        finalSteps.push({
+          id: step.id || Math.random().toString(36).substr(2, 9),
+          title: step.title || '',
+          content: step.content || '',
+          imageUrl: sanitizeInputUrl(imageUrl)
+        });
       }
 
       setUploadProgress(95);
-      await onSave(module.id, {
-        title,
-        description,
-        driveUrl,
-        courseId,
-        thumbnailUrl: finalThumbnailUrl,
-        componentIds,
-        files: uploadedFiles,
-        steps: finalSteps
-      });
+
+      // Clean payload structure for Firestore update
+      const updateData = {
+        title: title || '',
+        description: description || '',
+        driveUrl: sanitizeInputUrl(driveUrl),
+        videoUrl: sanitizeInputUrl(videoUrl),
+        pptUrl: sanitizeInputUrl(pptUrl),
+        courseId: courseId || '',
+        thumbnailUrl: sanitizeInputUrl(finalThumbnailUrl),
+        componentIds: componentIds || [],
+        files: uploadedFiles.map(f => ({
+          id: f.id || Math.random().toString(36).substr(2, 9),
+          name: f.name || '',
+          url: f.type === 'code' ? (f.url || '') : sanitizeInputUrl(f.url || ''),
+          type: f.type || 'link'
+        })),
+        steps: finalSteps.map(s => ({
+          id: s.id || Math.random().toString(36).substr(2, 9),
+          title: s.title || '',
+          content: s.content || '',
+          imageUrl: sanitizeInputUrl(s.imageUrl || '')
+        })),
+        quizQuestions: quizQuestions.map(q => ({
+          id: q.id || Math.random().toString(36).substr(2, 9),
+          question: q.question || '',
+          options: (q.options || ['', '', '', '']).map(opt => opt || ''),
+          correctOptionIdx: typeof q.correctOptionIdx === 'number' ? q.correctOptionIdx : 0
+        }))
+      };
+
+      await onSave(module.id, updateData);
       setUploadProgress(100);
       toast.success('Module successfully updated!');
       onClose();
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to update module settings');
+    } catch (err: any) {
+      console.error('Failed to save module:', err);
+      let friendlyError = err.message || 'Unknown error';
+      try {
+        // Parse custom handleFirestoreError JSON serialization
+        if (err.message && err.message.startsWith('{') && err.message.endsWith('}')) {
+          const parsed = JSON.parse(err.message);
+          if (parsed && typeof parsed === 'object' && parsed.error) {
+            friendlyError = parsed.error;
+            if (friendlyError.toLowerCase().includes('permission') || friendlyError.toLowerCase().includes('insufficient')) {
+              friendlyError = 'Permission denied by database security rules. Please verify your drive URLs are valid.';
+            }
+          }
+        }
+      } catch (e) {
+        // Keep string if JSON parsing fails
+      }
+      toast.error(`Failed to update module settings: ${friendlyError}`);
     } finally {
       setIsSaving(false);
     }
@@ -234,13 +341,35 @@ export default function EditModuleModal({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">Google Drive Linked ID URL</label>
+              <label className="text-[10px] uppercase font-bold tracking-widest text-[#F27D26]">Google Drive Linked ID URL</label>
               <input
                 type="url"
                 value={driveUrl}
                 onChange={(e) => setDriveUrl(e.target.value)}
                 className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26] font-mono text-xs"
                 placeholder="Google Doc Embed Viewer Link"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold tracking-widest text-[#F27D26]">Video Lecture Web URL / Playable Link</label>
+              <input
+                type="url"
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+                className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26] font-mono text-xs"
+                placeholder="YouTube link, Vimeo link, Google Drive video link or direct MP4 URL"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold tracking-widest text-[#F27D26]">PDF slides / Presentational PPT Web Link</label>
+              <input
+                type="url"
+                value={pptUrl}
+                onChange={(e) => setPptUrl(e.target.value)}
+                className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26] font-mono text-xs"
+                placeholder="Google Slides shareable view link, Canva presentation key, or public PDF URL"
               />
             </div>
 
@@ -282,7 +411,7 @@ export default function EditModuleModal({
                   </button>
                   <button 
                     type="button"
-                    onClick={handleAddStep}
+                    onClick={() => handleAddStep()}
                     className="px-2.5 py-1 bg-[#F27D26]/10 hover:bg-[#F27D26]/20 border border-[#F27D26]/20 text-[9px] text-[#F27D26] font-bold uppercase transition-all flex items-center gap-1"
                   >
                     <Plus size={10} /> Add Step
@@ -292,13 +421,23 @@ export default function EditModuleModal({
 
               <div className="space-y-4">
                 {steps.map((step, index) => (
-                  <div key={step.id} className="p-4 bg-black/40 rounded-xl border border-white/5 space-y-3 relative group/step">
+                  <div key={step.id} className="p-4 bg-black/40 rounded-xl border border-white/5 space-y-3 relative">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black tracking-widest text-[#F27D26]">STEP {index + 1}</span>
-                      <div className="flex items-center gap-1 opacity-0 group-hover/step:opacity-100 transition-opacity">
-                        <button type="button" onClick={() => handleMoveStep(step.id, 'up')} className="p-1 hover:text-white text-white/40"><ChevronRight size={14} className="-rotate-90" /></button>
-                        <button type="button" onClick={() => handleMoveStep(step.id, 'down')} className="p-1 hover:text-white text-white/40"><ChevronRight size={14} className="rotate-90" /></button>
-                        <button type="button" onClick={() => handleRemoveStep(step.id)} className="p-1 hover:text-red-500 text-white/40"><Trash2 size={14} /></button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleAddStep(step.id)}
+                          className="px-2 py-1 bg-[#F27D26]/10 hover:bg-[#F27D26]/25 border border-[#F27D26]/20 rounded text-[9px] text-[#F27D26] font-bold uppercase transition-all flex items-center gap-1 shrink-0"
+                          title="Insert a new empty step right below this step"
+                        >
+                          <Plus size={10} /> Add Step After
+                        </button>
+                        <div className="flex items-center gap-1 bg-white/5 px-1 rounded border border-white/5">
+                          <button type="button" onClick={() => handleMoveStep(step.id, 'up')} className="p-1 hover:text-white text-white/40" title="Move Up"><ChevronRight size={14} className="-rotate-90" /></button>
+                          <button type="button" onClick={() => handleMoveStep(step.id, 'down')} className="p-1 hover:text-white text-white/40" title="Move Down"><ChevronRight size={14} className="rotate-90" /></button>
+                          <button type="button" onClick={() => handleRemoveStep(step.id)} className="p-1 hover:text-red-500 text-white/40" title="Delete Step"><Trash2 size={14} /></button>
+                        </div>
                       </div>
                     </div>
                     <input 
@@ -336,6 +475,93 @@ export default function EditModuleModal({
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Quiz Questions Section */}
+            <div className="space-y-4 pt-4 border-t border-white/5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-[#F27D26]">Chapter Mock Test MCQs</label>
+                  <p className="text-[11px] text-white/40 mt-0.5">Add 5 to 10 questions for students to complete in order to clear this chapter.</p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={handleAddQuizQuestion}
+                  className="px-2.5 py-1 bg-[#F27D26]/10 hover:bg-[#F27D26]/20 border border-[#F27D26]/20 text-[9px] text-[#F27D26] font-bold uppercase transition-all flex items-center gap-1 shrink-0"
+                >
+                  <Plus size={10} /> Add MCQ
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {quizQuestions.length === 0 ? (
+                  <div className="p-6 bg-black/20 rounded-xl border border-white/5 text-center text-xs text-white/40">
+                    No mock test questions uploaded yet. Click "Add MCQ" to begin creating chapter quizzes!
+                  </div>
+                ) : (
+                  quizQuestions.map((q, index) => (
+                    <div key={q.id} className="p-4 bg-black/40 rounded-xl border border-white/5 space-y-3 relative">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black tracking-widest text-[#F27D26]">QUESTION {index + 1}</span>
+                        <button 
+                          type="button" 
+                          onClick={() => handleRemoveQuizQuestion(q.id)} 
+                          className="p-1 text-white/40 hover:text-red-500 transition-colors"
+                          title="Delete Question"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+
+                      <input 
+                        type="text"
+                        placeholder="Enter the MCQ question text..."
+                        value={q.question}
+                        required
+                        onChange={(e) => handleUpdateQuizQuestion(q.id, { question: e.target.value })}
+                        className="w-full bg-black/50 border border-white/5 rounded px-3 py-1.5 text-sm focus:border-[#F27D26] outline-none"
+                      />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {[0, 1, 2, 3].map((optIdx) => (
+                          <div key={optIdx} className="flex items-center gap-2">
+                            <span className="text-xs font-mono text-white/40">{String.fromCharCode(65 + optIdx)}.</span>
+                            <input 
+                              type="text"
+                              placeholder={`Option ${optIdx + 1}`}
+                              value={q.options[optIdx] || ''}
+                              required
+                              onChange={(e) => handleUpdateQuizOption(q.id, optIdx, e.target.value)}
+                              className="flex-1 bg-black/30 border border-white/5 rounded px-2.5 py-1 text-xs focus:border-[#F27D26] outline-none"
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-3 pt-1">
+                        <label className="text-[9px] uppercase font-bold tracking-widest text-white/40">Correct Answer Option:</label>
+                        <div className="flex gap-2">
+                          {[0, 1, 2, 3].map((optIdx) => (
+                            <button
+                              key={optIdx}
+                              type="button"
+                              onClick={() => handleUpdateQuizQuestion(q.id, { correctOptionIdx: optIdx })}
+                              className={cn(
+                                "px-2.5 py-0.5 rounded text-[10px] font-bold transition-all border",
+                                q.correctOptionIdx === optIdx 
+                                  ? "bg-green-500/20 border-green-500 text-green-400" 
+                                  : "bg-white/5 border-white/5 text-white/40 hover:border-white/20"
+                              )}
+                            >
+                              {String.fromCharCode(65 + optIdx)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -415,14 +641,147 @@ export default function EditModuleModal({
               <div className="grid grid-cols-2 gap-3">
                 <label className="flex items-center justify-center gap-2 p-2.5 bg-white/5 border border-dashed border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
                   <FileVideo size={14} className="text-white/40" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Add MP4 Video</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Add MP4 Video file</span>
                   <input type="file" className="hidden" accept="video/*" onChange={(e) => e.target.files?.[0] && setNewFilesToUpload(prev => [...prev, { file: e.target.files![0], type: 'video' }])} />
                 </label>
                 <label className="flex items-center justify-center gap-2 p-2.5 bg-white/5 border border-dashed border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
                   <FileGeneric size={14} className="text-white/40" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Add PDF/PPT</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Add PDF/PPT file</span>
                   <input type="file" className="hidden" accept=".pdf,.ppt,.pptx" onChange={(e) => e.target.files?.[0] && setNewFilesToUpload(prev => [...prev, { file: e.target.files![0], type: 'pdf' }])} />
                 </label>
+              </div>
+
+              {/* Link-Based Attachment Inputs */}
+              <div className="p-4 bg-zinc-900 rounded-xl border border-white/5 space-y-3 mt-2">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#F27D26] block">
+                  Add Video or PDF/PPT Link Instead of File Upload
+                </span>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[8px] uppercase font-bold tracking-widest text-white/40 block">Attachment Title</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Lesson Video or Slide Notes" 
+                      value={linkTitleVal}
+                      onChange={(e) => setLinkTitleVal(e.target.value)}
+                      className="w-full bg-black border border-white/10 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F27D26]" 
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[8px] uppercase font-bold tracking-widest text-white/40 block">Type of Link</label>
+                    <select
+                      value={linkTypeVal}
+                      onChange={(e) => setLinkTypeVal(e.target.value as 'video' | 'pdf')}
+                      className="w-full bg-black border border-white/10 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F27D26]"
+                    >
+                      <option value="video">Playable Video URL Link</option>
+                      <option value="pdf">PDF / Slides Web Link</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[8px] uppercase font-bold tracking-widest text-white/40 block">URL Link Address</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="url" 
+                      placeholder="https://youtu.be/abc or https://drive.google.com/..." 
+                      value={linkUrlVal}
+                      onChange={(e) => setLinkUrlVal(e.target.value)}
+                      className="flex-grow bg-black border border-white/10 rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#F27D26]" 
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        const trimmedUrl = linkUrlVal.trim();
+                        if (!trimmedUrl) {
+                          toast.error("Please provide a valid URL address.");
+                          return;
+                        }
+                        
+                        const titleToUse = linkTitleVal.trim() || (linkTypeVal === 'video' ? 'Video Lesson Presentation' : 'Curriculum PDF/Slides');
+                        setFiles(prev => [...prev, {
+                          id: 'lnk_' + Math.random().toString(36).substr(2, 9),
+                          name: titleToUse,
+                          url: trimmedUrl,
+                          type: linkTypeVal
+                        }]);
+                        
+                        setLinkTitleVal('');
+                        setLinkUrlVal('');
+                        toast.success(`Attached external web link: "${titleToUse}"`);
+                      }}
+                      className="px-4 py-1.5 bg-[#F27D26] hover:bg-[#d66a1e] text-white rounded text-xs font-bold transition-all shrink-0"
+                    >
+                      Attach Link
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Code attachment option */}
+              <div className="p-4 bg-zinc-900 rounded-xl border border-white/5 space-y-3 mt-2">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#F27D26]">Add Chapter Code File</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="Code filename (e.g. blink.ino)" 
+                    value={tempCodeTitle} 
+                    onChange={(e) => setTempCodeTitle(e.target.value)} 
+                    className="w-full bg-black border border-white/10 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#F27D26]" 
+                  />
+                  <label className="flex items-center justify-center gap-1.5 p-1.5 bg-white/5 border border-dashed border-white/10 rounded text-[10px] cursor-pointer hover:bg-white/10 text-white/60">
+                    <Upload size={12} />
+                    <span>Upload code (.ino, .cpp)</span>
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept=".ino,.cpp,.c,.py,.js,.html,.css,.txt" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setTempCodeTitle(file.name);
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            if (event.target?.result) {
+                              setTempCodeContent(event.target.result as string);
+                            }
+                          };
+                          reader.readAsText(file);
+                        }
+                      }} 
+                    />
+                  </label>
+                </div>
+                <textarea 
+                  placeholder="Paste script copy or upload code file..." 
+                  value={tempCodeContent} 
+                  onChange={(e) => setTempCodeContent(e.target.value)} 
+                  className="w-full bg-black border border-white/10 rounded px-3 py-1.5 text-xs h-20 font-mono text-white focus:outline-none focus:border-[#F27D26] resize-none" 
+                />
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (!tempCodeContent.trim()) {
+                      toast.error("Please provide code content before confirming.");
+                      return;
+                    }
+                    const titleToUse = tempCodeTitle.trim() || 'source_code.ino';
+                    setFiles(prev => [...prev, {
+                      id: 'c_' + Math.random().toString(36).substr(2, 9),
+                      name: titleToUse,
+                      url: tempCodeContent,
+                      type: 'code'
+                    }]);
+                    setTempCodeTitle('');
+                    setTempCodeContent('');
+                    toast.success(`Attached code file: ${titleToUse}`);
+                  }}
+                  className="w-full py-1.5 bg-[#F27D26] text-white rounded text-xs font-bold hover:bg-[#d66a1e] transition-all"
+                >
+                  Confirm Code Attachment
+                </button>
               </div>
             </div>
 

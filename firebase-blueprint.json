@@ -14,7 +14,10 @@
         "xp": { "type": "number", "default": 0 },
         "level": { "type": "number", "default": 1 },
         "badges": { "type": "array", "items": { "type": "string" } },
-        "lastLogin": { "type": "string", "format": "date-time" }
+        "lastLogin": { "type": "string", "format": "date-time" },
+        "projectPoints": { "type": "number", "default": 0 },
+        "quizPoints": { "type": "number", "default": 0 },
+        "totalPoints": { "type": "number", "default": 0 }
       },
       "required": ["uid", "name", "email", "role"]
     },
@@ -91,9 +94,84 @@
               "imageUrl": { "type": "string" }
             }
           }
+        },
+        "quizQuestions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/entities/QuizQuestion"
+          }
         }
       },
       "required": ["id", "courseId", "title"]
+    },
+    "QuizQuestion": {
+      "title": "QuizQuestion",
+      "description": "Multiple choice mock test question.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "question": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "correctOptionIdx": { "type": "number" }
+      },
+      "required": ["id", "question", "options", "correctOptionIdx"]
+    },
+    "QuizAttempt": {
+      "title": "QuizAttempt",
+      "description": "Student mock test scores and performance.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "score": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "pointsEarned": { "type": "number" },
+        "completed": { "type": "boolean" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentId", "moduleId", "score", "totalQuestions", "pointsEarned", "completed", "timestamp"]
+    },
+    "ProjectTheme": {
+      "title": "ProjectTheme",
+      "description": "Monthly or quarterly project themes for student competitions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "month": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "stepsHtml": { "type": "string" },
+        "rewardDescription": { "type": "string" }
+      },
+      "required": ["id", "title", "description", "month", "active", "createdAt"]
+    },
+    "ThematicSubmission": {
+      "title": "ThematicSubmission",
+      "description": "Approved or pending creative project submissions based on monthly themes.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "themeId": { "type": "string" },
+        "themeTitle": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "classSection": { "type": "string" },
+        "photoUrl": { "type": "string", "format": "uri" },
+        "description": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "teacherFeedback": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "pointsAwarded": { "type": "number" }
+      },
+      "required": ["id", "themeId", "studentId", "photoUrl", "status", "timestamp"]
     },
     "ContentActivation": {
       "title": "ContentActivation",
@@ -150,9 +228,13 @@
         "photoUrl": { "type": "string", "format": "uri" },
         "videoUrl": { "type": "string", "format": "uri" },
         "timestamp": { "type": "string", "format": "date-time" },
-        "status": { "type": "string", "enum": ["pending", "reviewed"] },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "approved", "rejected"] },
         "rating": { "type": "number" },
-        "feedback": { "type": "string" }
+        "feedback": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "projectTitle": { "type": "string" }
       },
       "required": ["id", "projectId", "studentId", "timestamp", "status"]
     },
@@ -241,6 +323,147 @@
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"] }
       },
       "required": ["id", "teacherId", "schoolId", "totalAmount", "date", "status"]
+    },
+    "SimulationLab": {
+      "title": "SimulationLab",
+      "description": "Virtual robotics and IoT simulator challenge labs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "microcontroller": { "type": "string", "enum": ["arduino-uno", "esp32", "pi-pico"] },
+        "starterWokwiId": { "type": "string" },
+        "testCriteria": { "type": "string" },
+        "points": { "type": "number", "default": 100 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "creatorId": { "type": "string" }
+      },
+      "required": ["id", "title", "description", "microcontroller", "points", "createdAt"]
+    },
+    "SimulationSubmission": {
+      "title": "SimulationSubmission",
+      "description": "Student Wokwi circuit simulation program code submissions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "labId": { "type": "string" },
+        "labTitle": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "classSection": { "type": "string" },
+        "wokwiUrl": { "type": "string" },
+        "description": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "teacherFeedback": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "pointsAwarded": { "type": "number" }
+      },
+      "required": ["id", "labId", "studentId", "wokwiUrl", "status", "timestamp"]
+    },
+    "ClassroomPhotoSubmission": {
+      "title": "ClassroomPhotoSubmission",
+      "description": "Media uploads from regular day-wise classroom teaching activities.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "dayNumber": { "type": "number" },
+        "lessonName": { "type": "string" },
+        "lessonId": { "type": "string" },
+        "driveUrls": { "type": "array", "items": { "type": "string" } },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "grade", "section", "lessonId", "driveUrls", "teacherId", "timestamp"]
+    },
+    "CompetitionProjectSubmission": {
+      "title": "CompetitionProjectSubmission",
+      "description": "Documentation for school-wide competition project submissions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "projectName": { "type": "string" },
+        "competitionName": { "type": "string" },
+        "studentNames": { "type": "array", "items": { "type": "string" } },
+        "projectBrief": { "type": "string" },
+        "photoDriveUrl": { "type": "string" },
+        "pdfDriveUrl": { "type": "string" },
+        "videoDriveUrl": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "projectName", "competitionName", "studentNames", "projectBrief", "photoDriveUrl", "pdfDriveUrl", "videoDriveUrl", "teacherId", "timestamp"]
+    },
+    "SchoolCurriculum": {
+      "title": "SchoolCurriculum",
+      "description": "Day-wise curriculums mapped to specific schools and grade levels.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "grade": { "type": "string" },
+        "numberOfClasses": { "type": "number" },
+        "selectedCourseIds": { "type": "array", "items": { "type": "string" } },
+        "classes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "classNumber": { "type": "number" },
+              "courseId": { "type": "string" },
+              "courseTitle": { "type": "string" },
+              "lessonId": { "type": "string" },
+              "lessonTitle": { "type": "string" }
+            }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "schoolName", "grade", "numberOfClasses", "classes"]
+    },
+    "CurriculumProgress": {
+      "title": "CurriculumProgress",
+      "description": "Independently tracked lesson and step progress for every school, grade, and section combination.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "statuses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "classNumber": { "type": "number" },
+              "courseId": { "type": "string" },
+              "lessonId": { "type": "string" },
+              "status": { "type": "string", "enum": ["Complete", "In Progress", "Not Started"] },
+              "start_date": { "type": "string" },
+              "end_date": { "type": "string" },
+              "lastActiveStepIdx": { "type": "number" }
+            }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "grade", "section"]
     }
   },
   "firestore": {
@@ -254,6 +477,15 @@
     "/attendance/{attendanceId}": { "schema": "Attendance", "description": "Attendance records." },
     "/logs/{logId}": { "schema": "Log", "description": "Teacher activity logs." },
     "/expenseTemplates/{templateId}": { "schema": "ExpenseTemplate", "description": "Expense templates." },
-    "/expenseLogs/{expenseLogId}": { "schema": "ExpenseLog", "description": "Expense records." }
+    "/expenseLogs/{expenseLogId}": { "schema": "ExpenseLog", "description": "Expense records." },
+    "/projectThemes/{themeId}": { "schema": "ProjectTheme", "description": "Project theme topics." },
+    "/thematicSubmissions/{submissionId}": { "schema": "ThematicSubmission", "description": "Student thematic submissions." },
+    "/quizAttempts/{attemptId}": { "schema": "QuizAttempt", "description": "Student quiz attempts." },
+    "/simulationLabs/{labId}": { "schema": "SimulationLab", "description": "Wokwi assignment challenge labs." },
+    "/simulationSubmissions/{submissionId}": { "schema": "SimulationSubmission", "description": "Student Wokwi lab submissions." },
+    "/classroomActivityPhotos/{submissionId}": { "schema": "ClassroomPhotoSubmission", "description": "Media uploads from regular day-wise classroom teaching activities." },
+    "/competitionProjectPhotos/{submissionId}": { "schema": "CompetitionProjectSubmission", "description": "Documentation for school-wide competition project submissions." },
+    "/schoolCurriculums/{curriculumId}": { "schema": "SchoolCurriculum", "description": "School curriculums mapped day-wise." },
+    "/curriculumProgress/{progressId}": { "schema": "CurriculumProgress", "description": "Progress tracking for curriculums." }
   }
 }

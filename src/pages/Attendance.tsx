@@ -174,8 +174,12 @@ export default function AttendancePage() {
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-[#F27D26]/10 flex items-center justify-center text-[#F27D26] font-bold">
-                          {student.name.charAt(0)}
+                        <div className="w-10 h-10 rounded-full bg-[#F27D26]/10 flex items-center justify-center text-[#F27D26] font-bold overflow-hidden flex-shrink-0 border border-white/5">
+                          {student.photoUrl ? (
+                            <img src={student.photoUrl} alt={student.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            student.name.charAt(0)
+                          )}
                         </div>
                         <div>
                           <p className="font-medium">{student.name}</p>

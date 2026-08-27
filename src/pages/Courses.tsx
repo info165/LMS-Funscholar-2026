@@ -9,6 +9,7 @@ import { cn } from '../lib/utils';
 
 export default function Courses() {
   const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
   const [courses, setCourses] = useState<Course[]>([]);
   const [schools, setSchools] = useState<School[]>([]);
   const [newTitle, setNewTitle] = useState('');
@@ -18,7 +19,16 @@ export default function Courses() {
 
   useEffect(() => {
     if (!profile) return;
-    const q = query(collection(db, 'courses'), where('teacherId', '==', profile.uid));
+    let q;
+    if (profile.role === 'admin') {
+      q = query(collection(db, 'courses'));
+    } else {
+      if (!profile.schoolIds || profile.schoolIds.length === 0) {
+        setCourses([]);
+        return;
+      }
+      q = query(collection(db, 'courses'), where('schoolId', 'in', profile.schoolIds));
+    }
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Course)));
     }, (error) => {
@@ -28,10 +38,14 @@ export default function Courses() {
   }, [profile]);
 
   useEffect(() => {
-    if (!profile?.schoolIds) return;
+    if (!profile) return;
     const unsubscribe = onSnapshot(collection(db, 'schools'), (snapshot) => {
       const allSchools = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as School));
-      setSchools(allSchools.filter(s => profile.schoolIds?.includes(s.id)));
+      if (profile.role === 'admin') {
+        setSchools(allSchools);
+      } else {
+        setSchools(allSchools.filter(s => profile.schoolIds?.includes(s.id)));
+      }
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'schools');
     });
@@ -87,60 +101,51 @@ export default function Courses() {
         <p className="text-white/50 font-mono text-xs uppercase tracking-widest mt-2">Manage your robotics curriculum</p>
       </header>
 
-      <form onSubmit={handleAddCourse} className="bg-[#151619] p-6 rounded-2xl border border-white/5 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {isAdmin && (
+        <form onSubmit={handleAddCourse} className="bg-[#151619] p-6 rounded-2xl border border-white/5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">Course Title</label>
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-[#F27D26]"
+                placeholder="e.g. Introduction to Arduino"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">School</label>
+              <select
+                value={selectedSchool}
+                onChange={(e) => setSelectedSchool(e.target.value)}
+                className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-[#F27D26]"
+              >
+                <option value="">Select School</option>
+                {schools.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div className="space-y-2">
-            <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">Course Title</label>
-            <input
-              type="text"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
+            <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">Description</label>
+            <textarea
+              value={newDesc}
+              onChange={(e) => setNewDesc(e.target.value)}
               className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-[#F27D26]"
-              placeholder="e.g. Introduction to Arduino"
+              placeholder="Course overview..."
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">Grade</label>
-            <input
-              type="number"
-              min="1"
-              max="12"
-              value={newGrade}
-              onChange={(e) => setNewGrade(Number(e.target.value))}
-              className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-[#F27D26]"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">School</label>
-            <select
-              value={selectedSchool}
-              onChange={(e) => setSelectedSchool(e.target.value)}
-              className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-[#F27D26]"
-            >
-              <option value="">Select School</option>
-              {schools.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">Description</label>
-          <textarea
-            value={newDesc}
-            onChange={(e) => setNewDesc(e.target.value)}
-            className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-[#F27D26]"
-            placeholder="Course overview..."
-          />
-        </div>
-        <button
-          type="submit"
-          className="bg-[#F27D26] text-white px-6 py-2 rounded-lg font-bold hover:bg-[#d66a1e] transition-colors flex items-center gap-2"
-        >
-          <Plus size={18} />
-          Create Course
-        </button>
-      </form>
+          <button
+            type="submit"
+            className="bg-[#F27D26] text-white px-6 py-2 rounded-lg font-bold hover:bg-[#d66a1e] transition-colors flex items-center gap-2"
+          >
+            <Plus size={18} />
+            Create Course
+          </button>
+        </form>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {courses.map((course) => (
@@ -164,25 +169,40 @@ export default function Courses() {
                   </p>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-4">
-                <button
-                  onClick={() => handleDeleteCourse(course.id)}
-                  className="text-white/20 hover:text-red-500 transition-colors"
-                >
-                  <Trash2 size={18} />
-                </button>
-                <button
-                  onClick={() => toggleActivation(course.id, course.activated)}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all",
-                    course.activated 
-                      ? "bg-green-500/10 text-green-500 border border-green-500/20" 
-                      : "bg-white/5 text-white/40 border border-white/10"
-                  )}
-                >
-                  {course.activated ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                  {course.activated ? 'Activated' : 'Inactive'}
-                </button>
+              <div className="flex flex-col items-end gap-3">
+                {isAdmin ? (
+                  <>
+                    <button
+                      onClick={() => handleDeleteCourse(course.id)}
+                      className="text-white/20 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                    <button
+                      onClick={() => toggleActivation(course.id, course.activated)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all",
+                        course.activated 
+                          ? "bg-green-500/10 text-green-500 border border-green-500/20" 
+                          : "bg-white/5 text-white/40 border border-white/10"
+                      )}
+                    >
+                      {course.activated ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                      {course.activated ? 'Activated' : 'Inactive'}
+                    </button>
+                  </>
+                ) : (
+                  <div
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest",
+                      course.activated 
+                        ? "bg-green-500/10 text-green-500 border border-green-500/20" 
+                        : "bg-white/5 text-white/40 border border-white/10"
+                    )}
+                  >
+                    {course.activated ? 'Active' : 'Inactive'}
+                  </div>
+                )}
               </div>
             </div>
           </div>

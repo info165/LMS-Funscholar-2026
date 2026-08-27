@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, where, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { School, UserProfile, Course, Submission, Attendance } from '../types';
+import { School, UserProfile, Course, Submission, Attendance, ThematicSubmission } from '../types';
 import { Users, School as SchoolIcon, BookOpen, ClipboardList, TrendingUp, MapPin, Search, Plus, Filter, ArrowUpRight, CheckCircle2, Clock, Award } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, LineChart, Line } from 'recharts';
@@ -23,6 +23,7 @@ export default function AdminDashboard() {
   const [submissionsData, setSubmissionsData] = useState<Submission[]>([]);
   const [attendanceData, setAttendanceData] = useState<Attendance[]>([]);
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
+  const [thematicSubmissions, setThematicSubmissions] = useState<ThematicSubmission[]>([]);
 
   useEffect(() => {
     const unsubSchools = onSnapshot(collection(db, 'schools'), (snapshot) => {
@@ -60,12 +61,17 @@ export default function AdminDashboard() {
       handleFirestoreError(error, OperationType.LIST, 'attendance');
     });
 
+    const unsubThematic = onSnapshot(collection(db, 'thematicSubmissions'), (snapshot) => {
+      setThematicSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ThematicSubmission)));
+    });
+
     return () => {
       unsubSchools();
       unsubTeachers();
       unsubStudents();
       unsubSubmissions();
       unsubAttendance();
+      unsubThematic();
     };
   }, []);
 
@@ -158,6 +164,50 @@ export default function AdminDashboard() {
           </motion.div>
         ))}
       </div>
+
+      {/* Approved Student Leaderboard Projects Showcase */}
+      <section className="bg-[#151619] border border-white/5 rounded-2xl p-8 space-y-6">
+        <div>
+          <h3 className="text-xl font-bold flex items-center gap-2">
+            <Award className="text-yellow-400" size={24} /> Trainer-Approved Competition Showcase
+          </h3>
+          <p className="text-white/40 text-xs mt-1">
+            Excellent student project photographs evaluated and approved by school trainers across all locations
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {thematicSubmissions.filter(s => s.status === 'approved').length === 0 ? (
+            <div className="col-span-full py-12 text-center bg-black/20 rounded-2xl border border-dashed border-white/5">
+              <p className="text-sm text-white/30 italic">No approved student competition submissions outstanding or published yet.</p>
+            </div>
+          ) : (
+            thematicSubmissions
+              .filter(s => s.status === 'approved')
+              .map(sub => (
+                <div key={sub.id} className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden flex flex-col justify-between hover:border-yellow-500/25 transition-all">
+                  <div className="aspect-video bg-zinc-950 relative">
+                    <img src={sub.photoUrl} alt="Approved Submission" className="w-full h-full object-cover animate-fade-in" />
+                    <div className="absolute top-3 right-3 px-2.5 py-1 bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-[8px] font-black uppercase tracking-widest rounded-full">
+                      +{sub.pointsAwarded || 100} PTS Credit
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-2">
+                    <div>
+                      <p className="text-xs font-bold text-white truncate">{sub.studentName}</p>
+                      <p className="text-[10px] text-white/40 truncate">{sub.schoolName}</p>
+                    </div>
+                    <p className="text-[10px] text-white/60 leading-relaxed font-sans line-clamp-2">{sub.description}</p>
+                    <div className="pt-2 border-t border-white/5 flex justify-between items-center text-[9px] text-white/40">
+                      <span>Trainer: {sub.teacherName || 'Trainer'}</span>
+                      <span className="font-mono text-[8px]">{new Date(sub.timestamp).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+          )}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-[#151619] border border-white/5 rounded-2xl p-8">

@@ -15,6 +15,23 @@ export interface UserProfile {
   level: number;
   badges: string[];
   lastLogin?: string;
+  classSection?: string;
+  studentClass?: string;
+  section?: string;
+  rollNumber?: string;
+  photoUrl?: string;
+  setupCompleted?: boolean;
+  lastActiveModuleId?: string;
+  lastActiveStepIdx?: number;
+  adminSubRole?: string;
+  canAddStudent?: boolean;
+  canAddTeacher?: boolean;
+  canAddSchool?: boolean;
+  canManageContent?: boolean;
+  projectPoints?: number;
+  quizPoints?: number;
+  totalPoints?: number;
+  isPasswordPublic?: boolean;
 }
 
 export interface School {
@@ -49,6 +66,7 @@ export interface Course {
   courseType?: string;
   subCategory?: string;
   difficulty?: string;
+  order?: number;
 }
 
 export interface ModuleStep {
@@ -71,6 +89,7 @@ export interface Module {
   videoUrl?: string;
   pptUrl?: string;
   isVisible?: boolean;
+  quizQuestions?: QuizQuestion[];
 }
 
 export interface ContentActivation {
@@ -79,6 +98,8 @@ export interface ContentActivation {
   schoolId: string;
   teacherId: string;
   activated: boolean;
+  classSection?: string;
+  section?: string;
 }
 
 export interface Project {
@@ -105,9 +126,13 @@ export interface Submission {
   photoUrl?: string;
   videoUrl?: string;
   timestamp: string;
-  status: 'pending' | 'reviewed';
+  status: 'pending' | 'reviewed' | 'approved' | 'rejected';
   rating?: number;
   feedback?: string;
+  schoolId?: string;
+  studentName?: string;
+  studentEmail?: string;
+  projectTitle?: string;
 }
 
 export interface Attendance {
@@ -164,3 +189,85 @@ export interface ExpenseLog {
   timestamp: any;
   status: 'pending' | 'approved' | 'rejected';
 }
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[]; // exactly 4 options
+  correctOptionIdx: number; // index from 0 to 3
+}
+
+export interface QuizAttempt {
+  id: string;
+  studentId: string;
+  moduleId: string;
+  score: number;
+  totalQuestions: number;
+  pointsEarned: number;
+  completed: boolean;
+  timestamp: string;
+}
+
+export interface ProjectTheme {
+  id: string;
+  title: string;
+  description: string;
+  month: string; // e.g. "June 2026"
+  active: boolean;
+  createdAt: string;
+  stepsHtml?: string; // Steps what they need to do
+  rewardDescription?: string; // What they get in return
+}
+
+export interface ThematicSubmission {
+  id: string;
+  themeId: string;
+  themeTitle: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  schoolId: string;
+  schoolName: string;
+  classSection: string;
+  photoUrl: string;
+  description: string;
+  timestamp: string;
+  status: 'pending' | 'approved' | 'rejected';
+  teacherFeedback?: string;
+  teacherId?: string;
+  teacherName?: string;
+  pointsAwarded?: number;
+}
+
+export interface SimulationLab {
+  id: string;
+  title: string;
+  description: string;
+  microcontroller: 'arduino-uno' | 'esp32' | 'pi-pico';
+  starterWokwiId?: string;
+  testCriteria?: string;
+  points: number;
+  createdAt: string;
+  creatorId: string;
+}
+
+export interface SimulationSubmission {
+  id: string;
+  labId: string;
+  labTitle: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  schoolId: string;
+  schoolName: string;
+  classSection?: string;
+  wokwiUrl: string;
+  description: string;
+  timestamp: string;
+  status: 'pending' | 'approved' | 'rejected';
+  teacherFeedback?: string;
+  teacherId?: string;
+  teacherName?: string;
+  pointsAwarded?: number;
+}
+

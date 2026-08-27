@@ -1,1 +1,130 @@
 @import "tailwindcss";
+
+/* 
+  WHITE AND ORANGE LMS THEME OVERRIDES
+  Converts the underlying dark-mode layout into a pristine white background with high-contrast slate typography,
+  while fully preserving all orange elements, buttons, accents, and orange interactive cues.
+  Only active when body has the .light-theme class.
+*/
+
+body.light-theme {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+body.light-theme :root {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Background overrides: main canvas and panels */
+body.light-theme .bg-\[\#050505\], 
+body.light-theme .bg-\[\#000000\], 
+body.light-theme .bg-black,
+body.light-theme #root {
+  background-color: #ffffff !important;
+}
+
+/* Cards and sub-panels */
+body.light-theme .bg-\[\#151619\], 
+body.light-theme .bg-\[\#151619\]\/90, 
+body.light-theme .bg-white\/5 {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+body.light-theme .bg-white\/10,
+body.light-theme .bg-white\/20,
+body.light-theme .bg-white\/30,
+body.light-theme .bg-black\/40 {
+  background-color: #f1f5f9 !important;
+}
+
+/* List item hover actions */
+body.light-theme .hover\:bg-white\/5:hover,
+body.light-theme .hover\:bg-white\/10:hover,
+body.light-theme .group:hover .bg-white\/5 {
+  background-color: #e2e8f0 !important;
+}
+
+/* High contrast borders */
+body.light-theme .border-white\/5,
+body.light-theme .border-white\/10,
+body.light-theme .border-white\/20,
+body.light-theme .border-black\/20 {
+  border-color: #cbd5e1 !important;
+}
+
+/* Typography mappings for supreme readability on light canvas */
+body.light-theme .text-white,
+body.light-theme .text-white\/95,
+body.light-theme .text-white\/90,
+body.light-theme .text-white\/85,
+body.light-theme .text-white\/80 {
+  color: #0f172a !important; /* Dark slate-900 */
+}
+
+body.light-theme .text-white\/75,
+body.light-theme .text-white\/70,
+body.light-theme .text-white\/60,
+body.light-theme .text-white\/50,
+body.light-theme .text-white\/40 {
+  color: #334155 !important; /* slate-700 */
+}
+
+body.light-theme .text-white\/30,
+body.light-theme .text-white\/20,
+body.light-theme .text-white\/10 {
+  color: #64748b !important; /* slate-500 */
+}
+
+/* Swapping CTA actions (black text on white body buttons) to dark elements on light canvas */
+body.light-theme .bg-white {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+}
+
+body.light-theme .text-black {
+  color: #ffffff !important;
+}
+
+/* Overlay & modal blur settings (turn matching light translucent backdrop-blur) */
+body.light-theme .bg-black\/85,
+body.light-theme .bg-black\/80,
+body.light-theme .bg-black\/90,
+body.light-theme .bg-black\/60 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+/* Form inputs & interactive selects */
+body.light-theme input, 
+body.light-theme select, 
+body.light-theme textarea {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+body.light-theme input::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Force standard dark icons on text mappings */
+body.light-theme .text-white\/40 svg,
+body.light-theme .text-white\/60 svg,
+body.light-theme .text-white\/80 svg {
+  color: #475569 !important;
+}
+
+/* Specific elements like google drive frame & preview headers */
+body.light-theme iframe {
+  border-color: #e2e8f0 !important;
+}
+
+/* Teacher email text styling with explicit high-contrast support */
+.teacher-email-text {
+  color: rgba(255, 255, 255, 0.85);
+}
+body.light-theme .teacher-email-text {
+  color: #1e293b !important;
+}

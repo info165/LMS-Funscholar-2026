@@ -7,13 +7,14 @@ import {
   Plus, Book, Trash2, Eye, EyeOff, ExternalLink, ChevronRight, LayoutGrid, Upload, 
   FileVideo, FileText as FileIcon, Loader2, Edit2, X, Settings, File as FileGeneric, 
   Search, BookOpen, Sliders, Play, Code, List, Columns, Sparkles, Filter, ChevronDown, Check,
-  ExternalLink as LinkIcon, HelpCircle
+  ExternalLink as LinkIcon, HelpCircle, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { storage } from '../firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { logAudit } from '../lib/audit';
 
 // Import extracted sub-components
 import EditCourseModal from '../components/EditCourseModal';
@@ -21,6 +22,7 @@ import EditModuleModal from '../components/EditModuleModal';
 import ManageComponentsModal from '../components/ManageComponentsModal';
 import FileViewer from '../components/FileViewer';
 import { ModulePlayer } from '../components/ModulePlayer';
+import ChapterActivationModal from '../components/ChapterActivationModal';
 
 const SUB_CATEGORIES: Record<string, string[]> = {
   'Robotics': ['Arduino & Microcontrollers', 'LEGO Robotics', 'Sensors & Actuators', 'Mechanical Assembly', 'BBC Micro:bit', 'PCB Prototyping'],
@@ -33,6 +35,8 @@ const SUB_CATEGORIES: Record<string, string[]> = {
 export default function ContentManager() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
+  const isTeacher = profile?.role === 'teacher';
+  const canEdit = isAdmin && (profile?.adminSubRole === 'Super Admin' || !!profile?.canManageContent);
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
@@ -61,6 +65,7 @@ export default function ContentManager() {
   const [newCourseType, setNewCourseType] = useState('Robotics');
   const [newCourseSubCategory, setNewCourseSubCategory] = useState('Arduino & Microcontrollers');
   const [newCourseDifficulty, setNewCourseDifficulty] = useState('Beginner');
+  const [newCourseSchoolId, setNewCourseSchoolId] = useState('');
 
   // Module Form States
   const [selectedCourseId, setSelectedCourseId] = useState('');
@@ -92,6 +97,7 @@ export default function ContentManager() {
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editingModule, setEditingModule] = useState<Module | null>(null);
   const [viewingModule, setViewingModule] = useState<Module | null>(null);
+  const [activatingModule, setActivatingModule] = useState<Module | null>(null);
   const [isComponentRepoOpen, setIsComponentRepoOpen] = useState(false);
 
   // Upload/Saving progress controls
@@ -134,10 +140,73 @@ export default function ContentManager() {
     };
   }, []);
 
+  const compressImageIfNeeded = (file: File): Promise<File | Blob> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) {
+        resolve(file);
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDim = 800; // sensible maximum dimension for thumbnails & reference images
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob(
+              (blob) => {
+                if (blob) {
+                  resolve(blob);
+                } else {
+                  resolve(file);
+                }
+              },
+              'image/jpeg',
+              0.7
+            );
+          } else {
+            resolve(file);
+          }
+        };
+        img.onerror = () => resolve(file);
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
   const uploadFile = async (file: File, path: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
+    let uploadItem: File | Blob = file;
+    try {
+      if (file.type.startsWith('image/')) {
+        uploadItem = await compressImageIfNeeded(file);
+      }
+    } catch (e) {
+      console.warn("Client side image compression failed, proceeding with original:", e);
+    }
+
+    return new Promise((resolve) => {
       const storageRef = ref(storage, path);
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      const uploadTask = uploadBytesResumable(storageRef, uploadItem);
 
       uploadTask.on('state_changed', 
         (snapshot) => {
@@ -145,12 +214,34 @@ export default function ContentManager() {
           setUploadProgress(progress);
         }, 
         (error) => {
-          console.error(`Upload error:`, error);
-          reject(error);
+          console.warn(`Firebase Storage upload restricted for ${file.name}. Falling back to inline embed. Details:`, error);
+          
+          if (file.size > 800 * 1024) {
+            toast.warning(`"${file.name}" is large (${(file.size / 1024).toFixed(0)} KB). Without working Cloud Storage, large inline embeds might exceed database limits. We recommend using external link options (e.g. YouTube, Drive) for large media.`);
+          } else {
+            toast.info(`Firebase Storage permissions restricted. Seamlessly embedding "${file.name}" as an inline secure link. Your changes will save successfully!`);
+          }
+
+          // Fallback to local Data URL of compressed file/blob
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            resolve(reader.result as string || '');
+          };
+          reader.onerror = () => {
+            resolve('');
+          };
+          reader.readAsDataURL(uploadItem);
         }, 
         () => {
           getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
             resolve(downloadURL);
+          }).catch((e) => {
+            console.warn("Error getting download URL, falling back to data URL:", e);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              resolve(reader.result as string || '');
+            };
+            reader.readAsDataURL(uploadItem);
           });
         }
       );
@@ -159,9 +250,12 @@ export default function ContentManager() {
 
   const handleAddCourse = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCourseTitle.trim()) return;
+    if (!newCourseTitle.trim() || !newCourseSchoolId) {
+      toast.error('Course Title and Target School mapping are required');
+      return;
+    }
     try {
-      await addDoc(collection(db, 'courses'), {
+      const docRef = await addDoc(collection(db, 'courses'), {
         title: newCourseTitle,
         grade: Number(newCourseGrade),
         description: newCourseDescription || `Robotics curriculum for Grade ${newCourseGrade}`,
@@ -170,12 +264,14 @@ export default function ContentManager() {
         subCategory: newCourseSubCategory,
         difficulty: newCourseDifficulty,
         teacherId: profile?.uid || '',
-        schoolId: profile?.schoolIds?.[0] || '',
+        schoolId: newCourseSchoolId,
         activated: false
       });
       setNewCourseTitle('');
       setNewCourseDescription('');
+      setNewCourseSchoolId('');
       toast.success('Course created successfully! Ready for module assignments.');
+      logAudit(profile, 'Add Course', `Added new curriculum course: "${newCourseTitle}" for Grade ${newCourseGrade}`, { courseId: docRef.id, title: newCourseTitle, grade: newCourseGrade });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'courses');
     }
@@ -282,22 +378,40 @@ export default function ContentManager() {
 
       setUploadProgress(90);
 
+      const sanitizeInputUrl = (urlStr: string): string => {
+        const trimmed = (urlStr || '').trim();
+        if (!trimmed) return '';
+        if (/^(https?|data):/i.test(trimmed)) {
+          return trimmed;
+        }
+        if (trimmed.includes('.')) {
+          return `https://${trimmed}`;
+        }
+        return '';
+      };
+
+      const cleanUploadedFiles = uploadedFiles.map(f => ({
+        ...f,
+        url: sanitizeInputUrl(f.url)
+      }));
+
       // Save module doc to Firestore
       const moduleData: any = {
         title: newModuleTitle,
         description: newModuleDescription,
         courseId: selectedCourseId,
-        driveUrl: newModuleDriveUrl || '',
-        thumbnailUrl: thumbnailUrl || '',
-        files: uploadedFiles,
+        driveUrl: sanitizeInputUrl(newModuleDriveUrl),
+        thumbnailUrl: sanitizeInputUrl(thumbnailUrl),
+        files: cleanUploadedFiles,
         componentIds: newModuleComponentIds,
         isVisible: true
       };
 
-      await addDoc(collection(db, 'modules'), moduleData);
+      const docRef = await addDoc(collection(db, 'modules'), moduleData);
       setUploadProgress(100);
 
       toast.success('Module added successfully into your curriculum library!');
+      logAudit(profile, 'Add Module', `Added new curriculum module: "${newModuleTitle}"`, { moduleId: docRef.id, title: newModuleTitle, courseId: selectedCourseId });
 
       // Instant cleanup
       setNewModuleTitle('');
@@ -329,6 +443,7 @@ export default function ContentManager() {
     try {
       await updateDoc(doc(db, 'courses', courseId), updates);
       toast.success('Course updated successfully');
+      logAudit(profile, 'Edit Course', `Updated details for course: "${updates.title || courseId}"`, { courseId, updates });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `courses/${courseId}`);
     }
@@ -338,8 +453,10 @@ export default function ContentManager() {
     try {
       await updateDoc(doc(db, 'modules', moduleId), updatedFields);
       toast.success('Module elements saved');
+      logAudit(profile, 'Edit Module', `Updated curriculum module: "${updatedFields.title || moduleId}"`, { moduleId, updatedFields });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `modules/${moduleId}`);
+      throw error;
     }
   };
 
@@ -353,6 +470,7 @@ export default function ContentManager() {
     try {
       await deleteDoc(doc(db, 'courses', course.id));
       toast.success('Course deleted');
+      logAudit(profile, 'Delete Course', `Deleted curriculum course: "${course.title}"`, { courseId: course.id });
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `courses/${course.id}`);
     }
@@ -364,6 +482,7 @@ export default function ContentManager() {
       await deleteDoc(doc(db, 'modules', module.id));
       setModules(prev => prev.filter(m => m.id !== module.id));
       toast.success('Module deleted');
+      logAudit(profile, 'Delete Module', `Deleted curriculum module: "${module.title}"`, { moduleId: module.id });
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `modules/${module.id}`);
     }
@@ -381,6 +500,7 @@ export default function ContentManager() {
         activated: !existing?.activated
       });
       toast.success(existing?.activated ? 'Module deactivated for students' : 'Module activated for students');
+      logAudit(profile, 'Toggle Module Activation', `${existing?.activated ? 'Deactivated' : 'Activated'} module activation status for students`, { moduleId });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `activations/${activationId}`);
     }
@@ -391,6 +511,7 @@ export default function ContentManager() {
     try {
       await updateDoc(doc(db, 'modules', module.id), { isVisible: nextVis });
       toast.success(nextVis ? 'Visible globally' : 'Hidden globally');
+      logAudit(profile, 'Toggle Module Visibility', `Changed visibility of module "${module.title}" to ${nextVis ? 'visible' : 'hidden'}`, { moduleId: module.id, isVisible: nextVis });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `modules/${module.id}`);
     }
@@ -400,6 +521,7 @@ export default function ContentManager() {
     try {
       await updateDoc(doc(db, 'modules', moduleId), { courseId: targetCourseId });
       toast.success('Module reassigned successfully');
+      logAudit(profile, 'Transfer Module', `Transferred module: "${moduleId}" to course ID "${targetCourseId}"`, { moduleId, targetCourseId });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `modules/${moduleId}`);
     }
@@ -425,6 +547,46 @@ export default function ContentManager() {
       toast.success('Component removed');
     } catch (error) {
       toast.error('Delete failed');
+    }
+  };
+
+  const handleMoveCourse = async (courseId: string, direction: 'up' | 'down') => {
+    // Sort all courses by current order / title
+    const orderedList = [...courses].sort((a, b) => {
+      const orderA = a.order !== undefined ? a.order : 0;
+      const orderB = b.order !== undefined ? b.order : 0;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.title.localeCompare(b.title);
+    });
+
+    const index = orderedList.findIndex(c => c.id === courseId);
+    if (index === -1) return;
+
+    let swapWithIdx = -1;
+    if (direction === 'up' && index > 0) {
+      swapWithIdx = index - 1;
+    } else if (direction === 'down' && index < orderedList.length - 1) {
+      swapWithIdx = index + 1;
+    }
+
+    if (swapWithIdx === -1) return;
+
+    try {
+      const batchPromises = orderedList.map((c, i) => {
+        let newOrder = i * 10;
+        if (i === index) {
+          newOrder = swapWithIdx * 10;
+        } else if (i === swapWithIdx) {
+          newOrder = index * 10;
+        }
+        return updateDoc(doc(db, 'courses', c.id), { order: newOrder });
+      });
+
+      await Promise.all(batchPromises);
+      toast.success(`Course order updated`);
+    } catch (err) {
+      console.error("Failed to update course order:", err);
+      toast.error("Failed to rearrange courses");
     }
   };
 
@@ -493,7 +655,7 @@ export default function ContentManager() {
             <BookOpen size={14} /> Explorer View
           </button>
           
-          {isAdmin && (
+          {canEdit && (
             <button 
               onClick={() => setActiveTab('publisher')}
               className={cn(
@@ -505,7 +667,7 @@ export default function ContentManager() {
             </button>
           )}
 
-          {isAdmin && (
+          {canEdit && (
             <button 
               onClick={() => setIsComponentRepoOpen(true)}
               className="px-3 py-2 rounded-xl text-xs font-bold text-white/40 hover:text-white hover:bg-white/5 transition-all flex items-center gap-2"
@@ -650,9 +812,14 @@ export default function ContentManager() {
 
             {/* CURRICULUM DISPLAY */}
             <div className="space-y-6">
-              {filteredCourses.sort((a, b) => a.grade - b.grade).map((course) => {
+              {[...filteredCourses].sort((a, b) => {
+                const orderA = a.order !== undefined ? a.order : 0;
+                const orderB = b.order !== undefined ? b.order : 0;
+                if (orderA !== orderB) return orderA - orderB;
+                return a.title.localeCompare(b.title);
+              }).map((course) => {
                 const courseModules = modules.filter(m => m.courseId === course.id)
-                  .filter(m => isAdmin || m.isVisible !== false);
+                  .filter(m => canEdit || m.isVisible !== false);
 
                 const isCollapsed = collapsedCourses.includes(course.id);
 
@@ -661,13 +828,16 @@ export default function ContentManager() {
                     key={course.id} 
                     className="bg-[#151619] border border-white/5 rounded-2xl overflow-hidden transition-all duration-300 hover:border-white/10"
                     onDragOver={(e) => {
+                      if (!canEdit) return;
                       e.preventDefault();
                       e.currentTarget.classList.add('border-[#F27D26]/50', 'bg-white/[0.01]');
                     }}
                     onDragLeave={(e) => {
+                      if (!canEdit) return;
                       e.currentTarget.classList.remove('border-[#F27D26]/50', 'bg-white/[0.01]');
                     }}
                     onDrop={(e) => {
+                      if (!canEdit) return;
                       e.preventDefault();
                       e.currentTarget.classList.remove('border-[#F27D26]/50', 'bg-white/[0.01]');
                       if (draggedModuleId) {
@@ -681,9 +851,24 @@ export default function ContentManager() {
                       <div className="flex-1 min-w-0" onClick={() => toggleCollapseCourse(course.id)}>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="text-xl font-bold text-white hover:text-[#F27D26] cursor-pointer transition-colors truncate">{course.title}</h4>
-                          <span className="px-2 py-0.5 bg-zinc-800 text-white/50 text-[9px] font-mono rounded">
-                            Grade {course.grade || 1}
-                          </span>
+                          {canEdit && (
+                            <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-0.5 ml-2" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => handleMoveCourse(course.id, 'up')}
+                                className="p-1 text-white/40 hover:text-[#F27D26] transition-colors"
+                                title="Move Course Up"
+                              >
+                                <ArrowUp size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleMoveCourse(course.id, 'down')}
+                                className="p-1 text-white/40 hover:text-[#F27D26] transition-colors"
+                                title="Move Course Down"
+                              >
+                                <ArrowDown size={14} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         
                         {/* Meta tagging details */}
@@ -703,7 +888,7 @@ export default function ContentManager() {
                       </div>
 
                       <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        {isAdmin && (
+                        {canEdit && (
                           <div className="flex items-center gap-1 border-r border-white/10 pr-3">
                             <button 
                               onClick={() => setEditingCourse(course)}
@@ -746,13 +931,15 @@ export default function ContentManager() {
                             viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-3"
                           )}>
                             {courseModules.map((module) => {
-                              const activation = activations.find(a => a.moduleId === module.id && profile?.schoolIds?.includes(a.schoolId));
-                              const isActivated = activation?.activated;
+                              const moduleActs = activations.filter(a => a.moduleId === module.id);
+                              const isActivated = profile?.role === 'admin'
+                                ? moduleActs.length > 0
+                                : moduleActs.some(a => profile?.schoolIds?.includes(a.schoolId));
 
                               return (
                                 <div 
                                   key={module.id} 
-                                  draggable={isAdmin}
+                                  draggable={canEdit}
                                   onDragStart={() => setDraggedModuleId(module.id)}
                                   onDragEnd={() => setDraggedModuleId(null)}
                                   onClick={() => setViewingModule(module)}
@@ -804,7 +991,7 @@ export default function ContentManager() {
                                     )}
 
                                     {/* Action button adjustments */}
-                                    {isAdmin && (
+                                    {canEdit && (
                                       <div className="flex items-center gap-1 border-l border-white/10 pl-1.5">
                                         <button 
                                           onClick={() => setEditingModule(module)}
@@ -825,31 +1012,35 @@ export default function ContentManager() {
 
                                     {/* Visibility / Live Status Controls */}
                                     <div className="flex items-center gap-1 ml-auto">
-                                      {(isAdmin || profile?.role === 'teacher') && (
-                                        <>
-                                          {isAdmin && (
-                                            <button 
-                                              onClick={() => toggleVisibility(module)}
-                                              className={cn(
-                                                "p-1 rounded bg-zinc-900 border border-white/5 hover:border-white/10 text-white/30 hover:text-white",
-                                                module.isVisible !== false ? "text-green-500 bg-green-500/5 hover:text-green-400" : ""
-                                              )}
-                                              title={module.isVisible !== false ? "Syllabus Visible Globally" : "Hidden Globally"}
-                                            >
-                                              {module.isVisible !== false ? <Eye size={12} /> : <EyeOff size={12} />}
-                                            </button>
+                                      {isAdmin && (
+                                        <button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleVisibility(module);
+                                          }}
+                                          className={cn(
+                                            "p-1 rounded bg-zinc-900 border border-white/5 hover:border-white/10 text-white/30 hover:text-white",
+                                            module.isVisible !== false ? "text-green-500 bg-green-500/5 hover:text-green-400" : ""
                                           )}
-                                          <button 
-                                            onClick={() => toggleActivation(module.id)}
-                                            className={cn(
-                                              "p-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-wider transition-all",
-                                              isActivated ? "bg-[#F27D26]/10 text-[#F27D26] border-[#F27D26]/20" : "bg-zinc-900 text-white/30 border-white/5 hover:text-white"
-                                            )}
-                                            title={isActivated ? "Activated in student hub" : "Deactivated"}
-                                          >
-                                            {isActivated ? "Active" : "Inactive"}
-                                          </button>
-                                        </>
+                                          title={module.isVisible !== false ? "Syllabus Visible Globally" : "Hidden Globally"}
+                                        >
+                                          {module.isVisible !== false ? <Eye size={12} /> : <EyeOff size={12} />}
+                                        </button>
+                                      )}
+                                      {(isAdmin || isTeacher) && (
+                                        <button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActivatingModule(module);
+                                          }}
+                                          className={cn(
+                                            "p-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-wider transition-all",
+                                            isActivated ? "bg-[#F27D26]/10 text-[#F27D26] border-[#F27D26]/20" : "bg-zinc-900 text-white/30 border-white/5 hover:text-white"
+                                          )}
+                                          title={isActivated ? "Activated in student hub" : "Click to manage activations"}
+                                        >
+                                          {isActivated ? "Active" : "Inactive"}
+                                        </button>
                                       )}
                                     </div>
 
@@ -888,7 +1079,7 @@ export default function ContentManager() {
       )}
 
       {/* RENDER TAB 2: CONTENT PUBLISHER HUB */}
-      {activeTab === 'publisher' && isAdmin && (
+      {activeTab === 'publisher' && canEdit && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           
           {/* SECTION A: COURSE BULK SETUP AND CREATION */}
@@ -910,25 +1101,28 @@ export default function ContentManager() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4 animate-fade-in">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold tracking-widest text-[#F27D26]">Assign School Course Mapping</label>
+                <select
+                  required
+                  value={newCourseSchoolId}
+                  onChange={(e) => setNewCourseSchoolId(e.target.value)}
+                  className="w-full bg-[#1c1d21] border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26] text-white"
+                >
+                  <option value="">Select Target School</option>
+                  {schools.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="animate-fade-in">
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-white/50">Target School Grade</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="12"
-                    required
-                    value={newCourseGrade}
-                    onChange={(e) => setNewCourseGrade(Number(e.target.value))}
-                    className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-[#F27D26]">Target Age Classification</label>
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-white/40">Target Age Classification</label>
                   <select
                     value={newCourseAgeRange}
                     onChange={(e) => setNewCourseAgeRange(e.target.value)}
-                    className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26] text-white"
+                    className="w-full bg-[#1c1d21] border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#F27D26] text-white"
                   >
                     <option value="6-8">Age 6-8 (Lower Primary)</option>
                     <option value="9-11">Age 9-11 (Upper Primary)</option>
@@ -1207,6 +1401,7 @@ export default function ContentManager() {
       {editingCourse && (
         <EditCourseModal 
           course={editingCourse}
+          schools={schools}
           onClose={() => setEditingCourse(null)}
           onUpdate={handleUpdateCourse}
         />
@@ -1251,6 +1446,17 @@ export default function ContentManager() {
           type={viewerConfig.type}
           title={viewerConfig.title}
           onClose={() => setViewerConfig(null)}
+        />
+      )}
+
+      {/* EXTRACTED: Chapter Activation Modal for specific schools and classes */}
+      {activatingModule && (
+        <ChapterActivationModal 
+          module={activatingModule}
+          schools={schools}
+          activations={activations}
+          profile={profile}
+          onClose={() => setActivatingModule(null)}
         />
       )}
 
